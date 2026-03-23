@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@rsense - Cadastrar</title>
+    <link rel="stylesheet" href="styles/global.css">
+    <link rel="stylesheet" href="styles/form.css">
+</head>
+<body class="bg-gradient">
+    <div class="main-container">
+        <header class="header">
+            <span class="logo">@rsense</span>
+        </header>
+
+        <main class="form-wrapper">
+            <nav class="form-tabs">
+                <button class="tab-item">Entrar</button>
+                <button class="tab-item active">Cadastrar</button>
+                <button class="tab-item">Recuperar</button>
+            </nav>
+
+            <section class="form-section">
+                <h1 class="form-title">Criar sua conta</h1>
+                <p class="form-subtitle">Preencha seus dados para começar</p>
+
+                <div class="progress-indicator">
+                    <div class="circle active">1</div>
+                    <div class="line"></div>
+                    <div class="circle">2</div>
+                </div>
+
+                <form class="form" id="registerForm1">
+                    <div class="input-group">
+                        <label for="fullName">Nome Completo</label>
+                        <div class="input-container">
+                            <span class="input-icon user-icon"></span>
+                            <input type="text" id="fullName" placeholder="Seu nome" required>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="corporateEmail">Email Corporativo</label>
+                        <div class="input-container">
+                            <span class="input-icon email-icon"></span>
+                            <input type="email" id="corporateEmail" placeholder="seu@empresa.com" required>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="companyName">Empresa</label>
+                        <div class="input-container">
+                            <span class="input-icon company-icon"></span>
+                            <input type="text" id="companyName" placeholder="Nome da empresa" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Continuar →</button>
+                    <div class="firestore-message" id="firestoreMessage"></div>
+                </form>
+            </section>
+        </main>
+    </div>
+</body>
+</html>
