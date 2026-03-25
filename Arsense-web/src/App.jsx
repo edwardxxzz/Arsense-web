@@ -1,64 +1,58 @@
-import React from 'react';
-// Importando a sua logo lá da pasta assets!
-import logoImg from './assets/logo.png'; 
-import './index.css'; // Importando nosso CSS
+import React, { useState } from 'react';
+import logoImg from './assets/logo.png';
+
+// Importando todas as nossas telas
+import Login from './components/Login';
+import CadastroPasso1 from './components/CadastroPasso1';
+import CadastroPasso2 from './components/CadastroPasso2';
+import RecuperarSenha from './components/RecuperarSenha';
+import Dashboard from './components/Dashboard'; // Importando o novo Dashboard
+
+import './index.css'; 
 
 function App() {
+  // O useState guarda qual tela está ativa no momento. Começa no 'login'
+  const [telaAtual, setTelaAtual] = useState('login');
+  
+  // Esse estado guarda os dados do Passo 1 para usarmos no Passo 2
+  const [cadastroData, setCadastroData] = useState({
+    fullName: '',
+    corporateEmail: '',
+    companyName: ''
+  });
+
+  // Essa função funciona como as teclas do controle remoto
+  const renderizarTela = () => {
+    switch (telaAtual) {
+      case 'login':
+        return <Login setTelaAtual={setTelaAtual} />;
+      case 'cadastro1':
+        return <CadastroPasso1 setTelaAtual={setTelaAtual} cadastroData={cadastroData} setCadastroData={setCadastroData} />;
+      case 'cadastro2':
+        return <CadastroPasso2 setTelaAtual={setTelaAtual} cadastroData={cadastroData} />;
+      case 'recuperar':
+        return <RecuperarSenha setTelaAtual={setTelaAtual} />;
+      case 'dashboard': // Nova tela de dashboard
+        return <Dashboard setTelaAtual={setTelaAtual} />;
+      default:
+        return <Login setTelaAtual={setTelaAtual} />;
+    }
+  };
+
+  // Se a tela for dashboard, não mostramos o header padrão com o logo
+  const isDashboard = telaAtual === 'dashboard';
+
   return (
-    <div className="bg-gradient main-container-wrapper">
-      <div className="main-container">
-        
-        {/* Aqui entra a sua logo em imagem */}
-        <header className="header">
-          <img src={logoImg} alt="Logo @rsense" className="logo-img" />
-        </header>
+    <div className={`bg-gradient ${isDashboard ? '' : 'main-container-wrapper'}`}>
+      <div className={`${isDashboard ? '' : 'main-container'}`}>
+        {!isDashboard && (
+          <header className="header">
+            <img src={logoImg} alt="Logo @rsense" className="logo-img" />
+          </header>
+        )}
 
-        <main className="form-wrapper">
-          <nav className="form-tabs">
-            <button className="tab-item active">Entrar</button>
-            <button className="tab-item">Cadastrar</button>
-            <button className="tab-item">Recuperar</button>
-          </nav>
-
-          <section className="form-section">
-            <h1 className="form-title">Bem-vindo de volta</h1>
-            <p className="form-subtitle">Entre na sua conta para continuar</p>
-
-            <form className="form">
-              <div className="input-group">
-                <label htmlFor="email">Email</label>
-                <div className="input-container">
-                  <input type="email" id="email" placeholder="seu@email.com" required />
-                </div>
-              </div>
-
-              <div className="input-group">
-                <div className="label-with-link">
-                  <label htmlFor="password">Senha</label>
-                  <a href="#" className="forgot-password-link">Esqueceu a senha?</a>
-                </div>
-                <div className="input-container">
-                  <input type="password" id="password" placeholder="●●●●●●" required />
-                </div>
-              </div>
-
-              <div className="input-checkbox">
-                <input type="checkbox" id="keepConnected" />
-                <label htmlFor="keepConnected">Manter conectado</label>
-              </div>
-
-              <button type="submit" className="btn btn-primary">Entrar →</button>
-            </form>
-
-            <div className="separator">
-              <span>ou continue com</span>
-            </div>
-
-            <button className="btn btn-social-google">
-              Entrar com o Google
-            </button>
-          </section>
-        </main>
+        {/* Aqui a mágica acontece: chamamos a função que mostra a tela certa */}
+        {renderizarTela()}
       </div>
     </div>
   );
