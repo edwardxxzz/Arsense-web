@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import { auth, db } from '../firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-// Importamos collection e addDoc para criar IDs aleatórios como na sua imagem do historico_geral
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore'; 
 
 function CadastroPasso2({ setTelaAtual, cadastroData }) {
@@ -26,11 +25,11 @@ function CadastroPasso2({ setTelaAtual, cadastroData }) {
 
     setLoading(true);
     try {
-      // 1. Cria usuário na Autenticação do Firebase (gera o UID)
+      // 1. Cria usuário na Autenticação do Firebase
       const userCredential = await createUserWithEmailAndPassword(auth, cadastroData.corporateEmail, password);
       const user = userCredential.user;
 
-      const nomeEmpresa = cadastroData.companyName; // Variável para a Empresa
+      const nomeEmpresa = cadastroData.companyName;
 
       // 2. Raiz: empresas > {nomeEmpresa}
       const empresaRef = doc(db, "empresas", nomeEmpresa);
@@ -39,7 +38,7 @@ function CadastroPasso2({ setTelaAtual, cadastroData }) {
         criadoEm: new Date().toISOString()
       }, { merge: true }); 
 
-      // 3. Usuários: empresas > {nomeEmpresa} > usuarios > {user.uid}
+      // 3. Usuários 
       const userRef = doc(db, "empresas", nomeEmpresa, "usuarios", user.uid);
       await setDoc(userRef, {
         dataLogin: new Date().toISOString(),
@@ -49,18 +48,39 @@ function CadastroPasso2({ setTelaAtual, cadastroData }) {
         userName: cadastroData.fullName
       });
 
-      // 4. Ambientes e Subcoleção Histórico: 
-      // Caminho rigoroso: empresas > {nomeEmpresa} > ambientes > Sala_de_estudos > historico > registro_inicial
-      
-      // 4.1. Primeiro, criamos o documento da sala (Boa prática para não ficar um "documento fantasma")
-      const nomeSala = "Sala_de_estudos"; // Variável para o ambiente
+      // 4. Centrais 
+      const centralRef = doc(db, "empresas", nomeEmpresa, "centrais", "macRPI");
+      await setDoc(centralRef, {
+        ip_local: "",
+        nome: "",
+        online: false
+      });
+
+      // 5. Ambientes
+      const nomeSala = "ambiente_1"; 
       const ambienteRef = doc(db, "empresas", nomeEmpresa, "ambientes", nomeSala);
       await setDoc(ambienteRef, {
-        nome: "Sala de estudos",
-        criadoEm: new Date().toISOString()
+        config: {
+          andar: "",
+          area: "",
+          nome: "",
+          tipo: ""
+        },
+        dados: {
+          central_id: "central 1",
+          criadoEM: new Date().toISOString(),
+          nome: "ambiente 1",
+          receptor_id: "receptor1"
+        },
+        sensores: {
+          iluminação: 0, 
+          presenca: false, 
+          temperatura: 0,
+          umidade: 0
+        }
       }, { merge: true });
 
-      // 4.2. Agora sim, criamos a subcoleção "historico" DENTRO da Sala de estudos
+      // 5.1. Subcoleção 'historico' dentro de ambiente_1
       const historicoAmbienteRef = doc(db, "empresas", nomeEmpresa, "ambientes", nomeSala, "historico", "registro_inicial");
       await setDoc(historicoAmbienteRef, {
         co2: 0,
@@ -68,12 +88,23 @@ function CadastroPasso2({ setTelaAtual, cadastroData }) {
         temperatura: 0,
         umidade: 0,
         timestamp: new Date().toISOString(),
-        luminosidade: 0, // Adicional solicitado
-        presenca: 0      // Adicional solicitado (pode ser boolean, mas deixei 0 seguindo os outros campos)
+        luminosidade: 0,
+        presenca: 0
       });
 
-      // 5. Histórico Geral: empresas > {nomeEmpresa} > historico_geral > {ID_Gerado_Automaticamente}
-      // Usamos 'addDoc' para o Firebase criar aquele ID maluco igual à sua imagem (ex: j7kotpooBFVUj...)
+      // 5.2. Subcoleção 'perifericos' dentro de ambiente_1 (AJUSTADO AQUI!)
+      // Agora tem o Map "geral" com as exatas características do seu print.
+      const perifericosRef = doc(db, "empresas", nomeEmpresa, "ambientes", nomeSala, "perifericos", "ar_condicionado");
+      await setDoc(perifericosRef, {
+        geral: {
+          ligado: false,
+          marca: "",
+          modelo: "",
+          temperatura: 24
+        }
+      });
+
+      // 6. Histórico Geral
       const historicoGeralRef = collection(db, "empresas", nomeEmpresa, "historico_geral");
       await addDoc(historicoGeralRef, {
         co2_medio: 0,
@@ -81,12 +112,12 @@ function CadastroPasso2({ setTelaAtual, cadastroData }) {
         indice_conforto: 0,
         qual_do_ar: 0,
         temperatura_media: 0,
-        timestamp: Date.now(), // Numérico como na sua imagem
-        luminosidade: 0, // Adicional solicitado
-        presenca: 0      // Adicional solicitado
+        timestamp: Date.now(),
+        luminosidade: 0,
+        presenca: 0
       });
 
-      // Sucesso! Direciona para o Dashboard/Login
+      // Sucesso!
       setTelaAtual('dashboard');
     } catch (error) {
       console.error(error);
