@@ -1,61 +1,65 @@
-import React, { useState } from 'react';
-import logoImg from './assets/logo.png';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Ambientes from './pages/Ambientes';
+import Ambiente from './pages/Ambiente';
+import Perifericos from './pages/Perifericos';
+import Alertas from './pages/Alertas';
+import Relatorios from './pages/Relatorios';
+import Sidebar from './components/Sidebar';
+import TopHeader from './components/TopHeader';
+import DadosPessoais from './components/DadosPessoais';
+import { useState } from 'react';
 
-// Importando todas as nossas telas
-import Login from './components/Login';
-import CadastroPasso1 from './components/CadastroPasso1';
-import CadastroPasso2 from './components/CadastroPasso2';
-import RecuperarSenha from './components/RecuperarSenha';
-import Dashboard from './components/Dashboard'; // Importando o novo Dashboard
+function AppLayout() {
+  const { user, loading } = useAuth();
+  const [showProfile, setShowProfile] = useState(false);
 
-import './index.css'; 
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' }}>
+        <div style={{ textAlign: 'center' }}>
+          <svg width="48" height="48" viewBox="0 0 36 36" fill="none" style={{ marginBottom: 16 }}>
+            <circle cx="18" cy="18" r="18" fill="#2563EB"/>
+            <path d="M10 18L16 12L22 18L16 24Z" fill="white"/>
+            <path d="M16 12L22 18L28 12" stroke="white" strokeWidth="2" fill="none"/>
+          </svg>
+          <p style={{ color: '#64748B', fontSize: 14 }}>Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
-function App() {
-  // O useState guarda qual tela está ativa no momento. Começa no 'login'
-  const [telaAtual, setTelaAtual] = useState('login');
-  
-  // Esse estado guarda os dados do Passo 1 para usarmos no Passo 2
-  const [cadastroData, setCadastroData] = useState({
-    fullName: '',
-    corporateEmail: '',
-    companyName: ''
-  });
-
-  // Essa função funciona como as teclas do controle remoto
-  const renderizarTela = () => {
-    switch (telaAtual) {
-      case 'login':
-        return <Login setTelaAtual={setTelaAtual} />;
-      case 'cadastro1':
-        return <CadastroPasso1 setTelaAtual={setTelaAtual} cadastroData={cadastroData} setCadastroData={setCadastroData} />;
-      case 'cadastro2':
-        return <CadastroPasso2 setTelaAtual={setTelaAtual} cadastroData={cadastroData} />;
-      case 'recuperar':
-        return <RecuperarSenha setTelaAtual={setTelaAtual} />;
-      case 'dashboard': // Nova tela de dashboard
-        return <Dashboard setTelaAtual={setTelaAtual} />;
-      default:
-        return <Login setTelaAtual={setTelaAtual} />;
-    }
-  };
-
-  // Se a tela for dashboard, não mostramos o header padrão com o logo
-  const isDashboard = telaAtual === 'dashboard';
+  if (!user) {
+    return <Login />;
+  }
 
   return (
-    <div className={`bg-gradient ${isDashboard ? '' : 'main-container-wrapper'}`}>
-      <div className={`${isDashboard ? '' : 'main-container'}`}>
-        {!isDashboard && (
-          <header className="header">
-            <img src={logoImg} alt="Logo @rsense" className="logo-img" />
-          </header>
-        )}
-
-        {/* Aqui a mágica acontece: chamamos a função que mostra a tela certa */}
-        {renderizarTela()}
+    <div style={{ minHeight: '100vh' }}>
+      <Sidebar />
+      <div className="main-content">
+        <TopHeader onOpenProfile={() => setShowProfile(true)} />
+        <Routes>
+          <Route path="/home" element={<Dashboard />} />
+          <Route path="/ambientes" element={<Ambientes />} />
+          <Route path="/ambiente" element={<Ambiente />} />
+          <Route path="/perifericos" element={<Perifericos />} />
+          <Route path="/alertas" element={<Alertas />} />
+          <Route path="/relatorios" element={<Relatorios />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
+        </Routes>
       </div>
+
+      {showProfile && <DadosPessoais onClose={() => setShowProfile(false)} />}
     </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppLayout />
+    </AuthProvider>
+  );
+}
