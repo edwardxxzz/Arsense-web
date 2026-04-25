@@ -8,6 +8,7 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import logoImg from '../assets/logo.png';
 
 export default function Sidebar() {
   const { logout } = useAuth();
@@ -21,12 +22,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-          <circle cx="18" cy="18" r="18" fill="#2563EB"/>
-          <path d="M10 18L16 12L22 18L16 24Z" fill="white"/>
-          <path d="M16 12L22 18L28 12" stroke="white" strokeWidth="2" fill="none"/>
-        </svg>
-        <span>Arsense</span>
+        <img src={logoImg} alt="@rsense" style={{ height: 36, width: 'auto' }} />
       </div>
 
       <nav className="sidebar-nav">
