@@ -22,7 +22,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
-        <img src={logoImg} alt="@rsense" style={{ height: 36, width: 'auto' }} />
+        <img src={logoImg} alt="@rsense" />
       </div>
 
       <nav className="sidebar-nav">
