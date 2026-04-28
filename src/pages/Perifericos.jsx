@@ -4,6 +4,39 @@ import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Snowflake, Sun, MoreVertical } from 'lucide-react';
 
+const AC_BRANDS_MODELS = {
+  'Amcor': ['Controles Amcor padrão'],
+  'Argo': ['Ulisse 13', 'WAP'],
+  'Bosch': ['Linha Climate'],
+  'Carrier': ['Séries RG', 'Vários'],
+  'Coolix': ['Controles Coolix'],
+  'Corona': ['Séries CS', 'Séries CSH'],
+  'Daikin': ['ARC433 / ARC452 / BRC4C151', 'ARC466', 'BRC1E / BRC1H', 'BRC52A', 'Controles de 160 bits', 'Controles de 176 bits'],
+  'Delonghi': ['PAC Séries (Portáteis)'],
+  'Electra': ['YK-M Séries'],
+  'Fujitsu': ['AR-RY / AR-RA / AR-DB'],
+  'Goodweather': ['Controles Padrão GW'],
+  'Gree': ['YAA / YAN / YB / YAC / YAW'],
+  'Haier': ['YR-W02 / YR-M10', 'Controles de 176 bits', 'YR-W16'],
+  'Hitachi': ['RAR Séries (ex: RAR-3V2)', 'RAR-2P2', 'RAR-3U1'],
+  'Kelvinator': ['YK Séries'],
+  'LG': ['AKB Séries (Splits comuns)', 'Modelos antigos / Janela'],
+  'Midea': ['RG52 / RG36 / R51 / R52'],
+  'Mitsubishi': ['Série KP (Electric)', 'Heavy Industries (88 bits)', 'Heavy Industries (152 bits)', 'Heavy Industries (32 bits)'],
+  'Neoclima': ['Controles Neoclima'],
+  'Panasonic': ['Séries CKP / NKE', 'Controles antigos (32 bits)'],
+  'Rhoss': ['Controles padrão Rhoss'],
+  'Samsung': ['Séries AR / AQ / DB93'],
+  'Sharp': ['Séries CRMC'],
+  'TCL': ['Séries TAC (112 bits)'],
+  'Teco': ['Controles Teco'],
+  'Toshiba': ['Séries WH-E / WH-TA'],
+  'Transcold': ['Controles Transcold'],
+  'Trotec': ['Modelos Portáteis'],
+  'Vestel': ['Séries V'],
+  'Whirlpool': ['Séries DG11J'],
+};
+
 export default function Perifericos() {
   const { empresaId } = useAuth();
   const [perifericos, setPerifericos] = useState([]);
@@ -18,7 +51,7 @@ export default function Perifericos() {
   const [ambiente, setAmbiente] = useState('');
   const [tipo, setTipo] = useState('');
   const [marca, setMarca] = useState('');
-  const [capacidade, setCapacidade] = useState('');
+  const [modeloControle, setModeloControle] = useState('');
   const [tipoInput, setTipoInput] = useState('');
   const [ip, setIp] = useState('');
 
@@ -117,6 +150,7 @@ export default function Perifericos() {
 
   const handleCreate = async () => {
     if (!nome || !ambiente || !tipo) return;
+    if (tipo === 'ar_condicionado' && (!marca || !modeloControle)) return;
     if (nome.toLowerCase() === 'geral') return;
 
     const effectiveTipo = tipo === 'outro' ? tipoInput.replace(/[.#$\[\]]/g, '_').replace(/\s+/g, '_') : tipo;
@@ -132,14 +166,14 @@ export default function Perifericos() {
         estado_real: false,
         estado_desejado: false,
         marca: marca || '',
-        ...(effectiveTipo === 'ar_condicionado' ? { capacidade: capacidade || '' } : {}),
+        ...(effectiveTipo === 'ar_condicionado' ? { modelo_controle: modeloControle || '' } : {}),
         ...(effectiveTipo === 'tomada' ? { tipo: tipoInput || '220v', ip: ip || '' } : {}),
         tipo: effectiveTipo,
       };
 
       await setDoc(docRef, existing);
       setShowModal(false);
-      setNome(''); setAmbiente(''); setTipo(''); setMarca(''); setCapacidade(''); setTipoInput(''); setIp('');
+      setNome(''); setAmbiente(''); setTipo(''); setMarca(''); setModeloControle(''); setTipoInput(''); setIp('');
 
       // Reload data
       window.location.reload();
@@ -189,7 +223,7 @@ export default function Perifericos() {
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, color: '#1E293B' }}>{perif.nome || perif.perifId}</div>
                   <div style={{ fontSize: 13, color: '#64748B' }}>
-                    {perif.deviceType} &bull; {perif.ambienteNome} &bull; {perif.marca || 'Sem marca'}
+                    {perif.deviceType} &bull; {perif.ambienteNome}{perif.marca ? ` &bull; ${perif.marca}` : ''}{perif.modelo_controle ? ` &bull; ${perif.modelo_controle}` : ''}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -257,16 +291,28 @@ export default function Perifericos() {
             </div>
 
             {tipo === 'ar_condicionado' && (
-              <div className="modal-form-row">
+              <>
                 <div className="modal-form-group">
-                  <label>Marca</label>
-                  <input className="input-field" placeholder="Ex: LG" value={marca} onChange={e => setMarca(e.target.value)} />
+                  <label>Marca <span className="required">*</span></label>
+                  <select className="select-field" value={marca} onChange={e => { setMarca(e.target.value); setModeloControle(''); }}>
+                    <option value="">Selecione a marca</option>
+                    {Object.keys(AC_BRANDS_MODELS).map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
                 </div>
-                <div className="modal-form-group">
-                  <label>Capacidade</label>
-                  <input className="input-field" placeholder="Ex: S4-Q12" value={capacidade} onChange={e => setCapacidade(e.target.value)} />
-                </div>
-              </div>
+                {marca && (
+                  <div className="modal-form-group">
+                    <label>Modelo do Controle <span className="required">*</span></label>
+                    <select className="select-field" value={modeloControle} onChange={e => setModeloControle(e.target.value)}>
+                      <option value="">Selecione o modelo do controle</option>
+                      {AC_BRANDS_MODELS[marca]?.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
             )}
 
             {tipo === 'tomada' && (
