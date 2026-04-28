@@ -55,42 +55,42 @@ export default function Perifericos() {
   const [tipoInput, setTipoInput] = useState('');
   const [ip, setIp] = useState('');
 
-  useEffect(() => {
+  const loadData = async () => {
     if (!empresaId) return;
+    setLoading(true);
+    const ambSnap = await getDocs(collection(db, 'empresas', empresaId, 'ambientes'));
+    const ambList = [];
+    const allPerifs = [];
 
-    const loadData = async () => {
-      const ambSnap = await getDocs(collection(db, 'empresas', empresaId, 'ambientes'));
-      const ambList = [];
-      const allPerifs = [];
+    for (const ambDoc of ambSnap.docs) {
+      if (ambDoc.id.toLowerCase() === 'ambiente_1') continue;
+      const ambData = ambDoc.data();
+      const ambName = ambData.dados?.nome || ambDoc.id;
+      ambList.push({ id: ambDoc.id, nome: ambName });
 
-      for (const ambDoc of ambSnap.docs) {
-        if (ambDoc.id.toLowerCase() === 'ambiente_1') continue;
-        const ambData = ambDoc.data();
-        const ambName = ambData.dados?.nome || ambDoc.id;
-        ambList.push({ id: ambDoc.id, nome: ambName });
-
-        const perSnap = await getDocs(collection(db, 'empresas', empresaId, 'ambientes', ambDoc.id, 'perifericos'));
-        perSnap.forEach(pDoc => {
-          const data = pDoc.data();
-          Object.keys(data).forEach(key => {
-            if (!['geral', 'sensores', 'sensoresGerais', 'tipo', 'id'].includes(key)) {
-              allPerifs.push({
-                deviceType: pDoc.id,
-                perifId: key,
-                ambienteId: ambDoc.id,
-                ambienteNome: ambName,
-                ...data[key],
-              });
-            }
-          });
+      const perSnap = await getDocs(collection(db, 'empresas', empresaId, 'ambientes', ambDoc.id, 'perifericos'));
+      perSnap.forEach(pDoc => {
+        const data = pDoc.data();
+        Object.keys(data).forEach(key => {
+          if (!['geral', 'sensores', 'sensoresGerais', 'tipo', 'id'].includes(key)) {
+            allPerifs.push({
+              deviceType: pDoc.id,
+              perifId: key,
+              ambienteId: ambDoc.id,
+              ambienteNome: ambName,
+              ...data[key],
+            });
+          }
         });
-      }
+      });
+    }
 
-      setAmbientes(ambList);
-      setPerifericos(allPerifs);
-      setLoading(false);
-    };
+    setAmbientes(ambList);
+    setPerifericos(allPerifs);
+    setLoading(false);
+  };
 
+  useEffect(() => {
     loadData();
   }, [empresaId]);
 
@@ -175,8 +175,8 @@ export default function Perifericos() {
       setShowModal(false);
       setNome(''); setAmbiente(''); setTipo(''); setMarca(''); setModeloControle(''); setTipoInput(''); setIp('');
 
-      // Reload data
-      window.location.reload();
+      // Reload data without page reload to avoid 404 in SPA
+      loadData();
     } catch (e) {
       console.error('Erro ao criar:', e);
     }
