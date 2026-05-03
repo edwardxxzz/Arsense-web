@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, BellOff, Info, CheckCircle } from 'lucide-react';
+import { Bell, BellOff, Info, CheckCircle} from 'lucide-react';
 
 export default function Alertas() {
   const [activeFilter, setActiveFilter] = useState('todos');
@@ -7,7 +7,7 @@ export default function Alertas() {
   const filters = [
     { key: 'todos', label: 'Todos', icon: Bell },
     { key: 'nao_lidos', label: 'Não Lidos', icon: Info },
-    { key: 'resolvidos', label: 'Resolvidos', icon: CheckCircle },
+    { key: 'resolvidos', label: 'Resolvidos', icon: CheckCircle},
   ];
 
   const emptyMessages = {
