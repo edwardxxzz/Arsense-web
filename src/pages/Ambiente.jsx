@@ -7,6 +7,39 @@ import { ArrowLeft, Thermometer, Droplets, Sun, Snowflake, MoreVertical, Calenda
 import { ComfortGauge } from '../components/Gauges';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
+const AC_BRANDS_MODELS = {
+  'Amcor': ['Controles Amcor padrão'],
+  'Argo': ['Ulisse 13', 'WAP'],
+  'Bosch': ['Linha Climate'],
+  'Carrier': ['Séries RG', 'Vários'],
+  'Coolix': ['Controles Coolix'],
+  'Corona': ['Séries CS', 'Séries CSH'],
+  'Daikin': ['ARC433 / ARC452 / BRC4C151', 'ARC466', 'BRC1E / BRC1H', 'BRC52A', 'Controles de 160 bits', 'Controles de 176 bits'],
+  'Delonghi': ['PAC Séries (Portáteis)'],
+  'Electra': ['YK-M Séries'],
+  'Fujitsu': ['AR-RY / AR-RA / AR-DB'],
+  'Goodweather': ['Controles Padrão GW'],
+  'Gree': ['YAA / YAN / YB / YAC / YAW'],
+  'Haier': ['YR-W02 / YR-M10', 'Controles de 176 bits', 'YR-W16'],
+  'Hitachi': ['RAR Séries (ex: RAR-3V2)', 'RAR-2P2', 'RAR-3U1'],
+  'Kelvinator': ['YK Séries'],
+  'LG': ['AKB Séries (Splits comuns)', 'Modelos antigos / Janela'],
+  'Midea': ['RG52 / RG36 / R51 / R52'],
+  'Mitsubishi': ['Série KP (Electric)', 'Heavy Industries (88 bits)', 'Heavy Industries (152 bits)', 'Heavy Industries (32 bits)'],
+  'Neoclima': ['Controles Neoclima'],
+  'Panasonic': ['Séries CKP / NKE', 'Controles antigos (32 bits)'],
+  'Rhoss': ['Controles padrão Rhoss'],
+  'Samsung': ['Séries AR / AQ / DB93'],
+  'Sharp': ['Séries CRMC'],
+  'TCL': ['Séries TAC (112 bits)'],
+  'Teco': ['Controles Teco'],
+  'Toshiba': ['Séries WH-E / WH-TA'],
+  'Transcold': ['Controles Transcold'],
+  'Trotec': ['Modelos Portáteis'],
+  'Vestel': ['Séries V'],
+  'Whirlpool': ['Séries DG11J'],
+};
+
 export default function Ambiente() {
   const { empresaId } = useAuth();
   const [searchParams] = useSearchParams();
@@ -23,12 +56,21 @@ export default function Ambiente() {
   const [toggleLoading, setToggleLoading] = useState({});
   const [openMenuKey, setOpenMenuKey] = useState(null);
 
-  // Periférico form
+  // New periférico form
   const [showNewPeriphModal, setShowNewPeriphModal] = useState(false);
   const [periphNome, setPeriphNome] = useState('');
   const [periphTipo, setPeriphTipo] = useState('');
   const [periphMarca, setPeriphMarca] = useState('');
-  const [periphCapacidade, setPeriphCapacidade] = useState('');
+  const [periphModeloControle, setPeriphModeloControle] = useState('');
+
+  // Edit periférico form
+  const [showEditPeriphModal, setShowEditPeriphModal] = useState(false);
+  const [editPerif, setEditPerif] = useState(null);
+  const [editPeriphNome, setEditPeriphNome] = useState('');
+  const [editPeriphMarca, setEditPeriphMarca] = useState('');
+  const [editPeriphModeloControle, setEditPeriphModeloControle] = useState('');
+  const [editPeriphTipoInput, setEditPeriphTipoInput] = useState('');
+  const [editPeriphIp, setEditPeriphIp] = useState('');
 
   useEffect(() => {
     if (!empresaParam || !ambienteId) return;
@@ -103,8 +145,44 @@ export default function Ambiente() {
     setOpenMenuKey(null);
   };
 
+  const openEditPeriph = (perif) => {
+    setEditPerif(perif);
+    setEditPeriphNome(perif.nome || perif.perifId);
+    setEditPeriphMarca(perif.marca || '');
+    setEditPeriphModeloControle(perif.modelo_controle || '');
+    setEditPeriphTipoInput(perif.tipo || '');
+    setEditPeriphIp(perif.ip || '');
+    setOpenMenuKey(null);
+    setShowEditPeriphModal(true);
+  };
+
+  const handleEditPeriphSave = async () => {
+    if (!editPerif || !editPeriphNome) return;
+    try {
+      const docRef = doc(db, 'empresas', empresaParam, 'ambientes', ambienteId, 'perifericos', editPerif.deviceType);
+      const updates = {
+        [`${editPerif.perifId}.nome`]: editPeriphNome,
+      };
+      if (editPerif.deviceType === 'ar_condicionado') {
+        updates[`${editPerif.perifId}.marca`] = editPeriphMarca;
+        updates[`${editPerif.perifId}.modelo_controle`] = editPeriphModeloControle;
+      } else if (editPerif.deviceType === 'tomada') {
+        updates[`${editPerif.perifId}.tipo`] = editPeriphTipoInput;
+        updates[`${editPerif.perifId}.ip`] = editPeriphIp;
+      } else {
+        updates[`${editPerif.perifId}.marca`] = editPeriphMarca;
+      }
+      await updateDoc(docRef, updates);
+      setShowEditPeriphModal(false);
+      setEditPerif(null);
+    } catch (e) {
+      console.error('Erro ao editar periférico:', e);
+    }
+  };
+
   const handleCreatePeriph = async () => {
     if (!periphNome || !periphTipo || periphNome.toLowerCase() === 'geral') return;
+    if (periphTipo === 'ar_condicionado' && (!periphMarca || !periphModeloControle)) return;
     try {
       const docRef = doc(db, 'empresas', empresaParam, 'ambientes', ambienteId, 'perifericos', periphTipo);
       const snap = await getDoc(docRef);
@@ -116,13 +194,13 @@ export default function Ambiente() {
         estado_real: false,
         estado_desejado: false,
         marca: periphMarca || '',
-        ...(periphTipo === 'ar_condicionado' ? { capacidade: periphCapacidade || '' } : {}),
+        ...(periphTipo === 'ar_condicionado' ? { modelo_controle: periphModeloControle || '' } : {}),
         tipo: periphTipo,
       };
 
       await setDoc(docRef, existing);
       setShowNewPeriphModal(false);
-      setPeriphNome(''); setPeriphTipo(''); setPeriphMarca(''); setPeriphCapacidade('');
+      setPeriphNome(''); setPeriphTipo(''); setPeriphMarca(''); setPeriphModeloControle('');
     } catch (e) {
       console.error('Erro ao criar periférico:', e);
     }
@@ -251,7 +329,9 @@ export default function Ambiente() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, color: '#1E293B' }}>{perif.nome || perif.perifId}</div>
-                      <div style={{ fontSize: 13, color: '#64748B' }}>{perif.deviceType} &bull; {perif.marca || 'Sem marca'}</div>
+                      <div style={{ fontSize: 13, color: '#64748B' }}>
+                        {perif.deviceType}{perif.marca ? ` &bull; ${perif.marca}` : ''}{perif.modelo_controle ? ` &bull; ${perif.modelo_controle}` : ''}
+                      </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                       <span style={{ fontSize: 13, color: '#64748B' }}>{isOn ? 'Ligado' : 'Desligado'}</span>
@@ -274,7 +354,16 @@ export default function Ambiente() {
                         </button>
                         {openMenuKey === key && (
                           <div style={{ position: 'absolute', right: 0, top: 28, backgroundColor: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, overflow: 'hidden' }}>
-                            <button onClick={() => handleDeletePeripheral(perif)} style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#EF4444', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}>
+                            <button
+                              onClick={() => openEditPeriph(perif)}
+                              style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#2563EB', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => handleDeletePeripheral(perif)}
+                              style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#EF4444', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}
+                            >
                               Deletar
                             </button>
                           </div>
@@ -347,20 +436,97 @@ export default function Ambiente() {
               </select>
             </div>
 
-            <div className="modal-form-row">
-              <div className="modal-form-group">
-                <label>Marca</label>
-                <input className="input-field" placeholder="Ex: LG" value={periphMarca} onChange={e => setPeriphMarca(e.target.value)} />
-              </div>
-              <div className="modal-form-group">
-                <label>Capacidade</label>
-                <input className="input-field" placeholder="Ex: S4-Q12" value={periphCapacidade} onChange={e => setPeriphCapacidade(e.target.value)} />
-              </div>
-            </div>
+            {periphTipo === 'ar_condicionado' && (
+              <>
+                <div className="modal-form-group">
+                  <label>Marca <span className="required">*</span></label>
+                  <select className="select-field" value={periphMarca} onChange={e => { setPeriphMarca(e.target.value); setPeriphModeloControle(''); }}>
+                    <option value="">Selecione a marca</option>
+                    {Object.keys(AC_BRANDS_MODELS).map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                {periphMarca && (
+                  <div className="modal-form-group">
+                    <label>Modelo do Controle <span className="required">*</span></label>
+                    <select className="select-field" value={periphModeloControle} onChange={e => setPeriphModeloControle(e.target.value)}>
+                      <option value="">Selecione o modelo do controle</option>
+                      {AC_BRANDS_MODELS[periphMarca]?.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
 
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowNewPeriphModal(false)}>Cancelar</button>
               <button className="btn-primary" onClick={handleCreatePeriph}>Criar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Peripheral Modal */}
+      {showEditPeriphModal && editPerif && (
+        <div className="modal-overlay" onClick={() => setShowEditPeriphModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">Editar Periférico</h2>
+            <p className="modal-subtitle">Atualize as informações do dispositivo</p>
+
+            <div className="modal-form-group">
+              <label>Nome <span className="required">*</span></label>
+              <input className="input-field" placeholder="Ex: Ar Condicionado Principal" value={editPeriphNome} onChange={e => setEditPeriphNome(e.target.value)} />
+            </div>
+
+            <div className="modal-form-group">
+              <label>Tipo</label>
+              <input className="input-field" value={editPerif.deviceType === 'ar_condicionado' ? 'Ar Condicionado' : editPerif.deviceType === 'tomada' ? 'Tomada' : editPerif.deviceType} disabled style={{ opacity: 0.6 }} />
+            </div>
+
+            {editPerif.deviceType === 'ar_condicionado' && (
+              <>
+                <div className="modal-form-group">
+                  <label>Marca <span className="required">*</span></label>
+                  <select className="select-field" value={editPeriphMarca} onChange={e => { setEditPeriphMarca(e.target.value); setEditPeriphModeloControle(''); }}>
+                    <option value="">Selecione a marca</option>
+                    {Object.keys(AC_BRANDS_MODELS).map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                {editPeriphMarca && (
+                  <div className="modal-form-group">
+                    <label>Modelo do Controle <span className="required">*</span></label>
+                    <select className="select-field" value={editPeriphModeloControle} onChange={e => setEditPeriphModeloControle(e.target.value)}>
+                      <option value="">Selecione o modelo do controle</option>
+                      {AC_BRANDS_MODELS[editPeriphMarca]?.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+
+            {editPerif.deviceType === 'tomada' && (
+              <div className="modal-form-row">
+                <div className="modal-form-group">
+                  <label>Tipo</label>
+                  <input className="input-field" placeholder="Ex: 220v" value={editPeriphTipoInput} onChange={e => setEditPeriphTipoInput(e.target.value)} />
+                </div>
+                <div className="modal-form-group">
+                  <label>IP</label>
+                  <input className="input-field" placeholder="Ex: 192.168.1.1" value={editPeriphIp} onChange={e => setEditPeriphIp(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowEditPeriphModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={handleEditPeriphSave}>Salvar</button>
             </div>
           </div>
         </div>

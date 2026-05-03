@@ -22,6 +22,7 @@ export default function Login() {
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regCompany, setRegCompany] = useState('');
+  const [regCompanyError, setRegCompanyError] = useState('');
 
   // Cadastro Passo 2
   const [regPassword, setRegPassword] = useState('');
@@ -43,6 +44,16 @@ export default function Login() {
   const nomeValido = regName.trim().length >= 2;
   const emailCorpValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail);
   const empresaValida = /^[a-zA-ZÀ-ÿ0-9\s]+$/.test(regCompany) && regCompany.trim().length > 0;
+
+  const handleCompanyChange = (e) => {
+    const val = e.target.value;
+    if (/^[a-zA-ZÀ-ÿ0-9\s]*$/.test(val)) {
+      setRegCompany(val);
+      setRegCompanyError('');
+    } else {
+      setRegCompanyError('Não é permitido usar caracteres especiais no nome da empresa');
+    }
+  };
   const podeContinuar = emailCorpValido && nomeValido && empresaValida;
 
   // Validações cadastro passo 2
@@ -257,10 +268,11 @@ export default function Login() {
 
                   <div className="input-group">
                     <label htmlFor="companyName">Empresa (sem caracteres especiais)</label>
-                    <div className={`input-container ${!empresaValida && regCompany.length > 0 ? 'error-border' : ''}`}>
+                    <div className={`input-container ${(!empresaValida && regCompany.length > 0) || regCompanyError ? 'error-border' : ''}`}>
                       <input type="text" id="companyName" placeholder="Nome da empresa" value={regCompany}
-                        onChange={e => setRegCompany(e.target.value)} />
+                        onChange={handleCompanyChange} />
                     </div>
+                    {regCompanyError && <p className="error-text" style={{ marginTop: 4, fontSize: 12 }}>{regCompanyError}</p>}
                   </div>
 
                   <button type="submit" className="btn btn-primary" disabled={!podeContinuar}>Continuar →</button>

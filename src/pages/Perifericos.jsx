@@ -46,7 +46,7 @@ export default function Perifericos() {
   const [openMenuKey, setOpenMenuKey] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
-  // Form
+  // Create form
   const [nome, setNome] = useState('');
   const [ambiente, setAmbiente] = useState('');
   const [tipo, setTipo] = useState('');
@@ -54,6 +54,15 @@ export default function Perifericos() {
   const [modeloControle, setModeloControle] = useState('');
   const [tipoInput, setTipoInput] = useState('');
   const [ip, setIp] = useState('');
+
+  // Edit form
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editPerif, setEditPerif] = useState(null);
+  const [editNome, setEditNome] = useState('');
+  const [editMarca, setEditMarca] = useState('');
+  const [editModeloControle, setEditModeloControle] = useState('');
+  const [editTipoInput, setEditTipoInput] = useState('');
+  const [editIp, setEditIp] = useState('');
 
   const loadData = async () => {
     if (!empresaId) return;
@@ -144,8 +153,42 @@ export default function Perifericos() {
       console.error('Erro ao deletar:', e);
     }
     setOpenMenuKey(null);
-    // Reload
     setPerifericos(prev => prev.filter(p => !(p.deviceType === perif.deviceType && p.perifId === perif.perifId)));
+  };
+
+  const openEditPerif = (perif) => {
+    setEditPerif(perif);
+    setEditNome(perif.nome || perif.perifId);
+    setEditMarca(perif.marca || '');
+    setEditModeloControle(perif.modelo_controle || '');
+    setEditTipoInput(perif.tipo || '');
+    setEditIp(perif.ip || '');
+    setOpenMenuKey(null);
+    setShowEditModal(true);
+  };
+
+  const handleEditSave = async () => {
+    if (!editPerif || !editNome) return;
+    try {
+      const docRef = doc(db, 'empresas', empresaId, 'ambientes', editPerif.ambienteId, 'perifericos', editPerif.deviceType);
+      const updates = {
+        [`${editPerif.perifId}.nome`]: editNome,
+      };
+      if (editPerif.deviceType === 'ar_condicionado') {
+        updates[`${editPerif.perifId}.marca`] = editMarca;
+        updates[`${editPerif.perifId}.modelo_controle`] = editModeloControle;
+      } else if (editPerif.deviceType === 'tomada') {
+        updates[`${editPerif.perifId}.tipo`] = editTipoInput;
+        updates[`${editPerif.perifId}.ip`] = editIp;
+      } else {
+        updates[`${editPerif.perifId}.marca`] = editMarca;
+      }
+      await updateDoc(docRef, updates);
+      setShowEditModal(false);
+      setEditPerif(null);
+    } catch (e) {
+      console.error('Erro ao editar:', e);
+    }
   };
 
   const handleCreate = async () => {
@@ -247,7 +290,16 @@ export default function Perifericos() {
                     </button>
                     {openMenuKey === key && (
                       <div style={{ position: 'absolute', right: 0, top: 28, backgroundColor: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, overflow: 'hidden' }}>
-                        <button onClick={() => handleDelete(perif)} style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#EF4444', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}>
+                        <button
+                          onClick={() => openEditPerif(perif)}
+                          style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#2563EB', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => handleDelete(perif)}
+                          style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#EF4444', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}
+                        >
                           Deletar
                         </button>
                       </div>
@@ -344,6 +396,76 @@ export default function Perifericos() {
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowModal(false)}>Cancelar</button>
               <button className="btn-primary" onClick={handleCreate}>Criar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Peripheral Modal */}
+      {showEditModal && editPerif && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">Editar Periférico</h2>
+            <p className="modal-subtitle">Atualize as informações do dispositivo</p>
+
+            <div className="modal-form-group">
+              <label>Nome <span className="required">*</span></label>
+              <input className="input-field" placeholder="Ex: Ar Condicionado Principal" value={editNome} onChange={e => setEditNome(e.target.value)} />
+            </div>
+
+            <div className="modal-form-group">
+              <label>Tipo</label>
+              <input className="input-field" value={editPerif.deviceType === 'ar_condicionado' ? 'Ar Condicionado' : editPerif.deviceType === 'tomada' ? 'Tomada' : editPerif.deviceType} disabled style={{ opacity: 0.6 }} />
+            </div>
+
+            {editPerif.deviceType === 'ar_condicionado' && (
+              <>
+                <div className="modal-form-group">
+                  <label>Marca <span className="required">*</span></label>
+                  <select className="select-field" value={editMarca} onChange={e => { setEditMarca(e.target.value); setEditModeloControle(''); }}>
+                    <option value="">Selecione a marca</option>
+                    {Object.keys(AC_BRANDS_MODELS).map(b => (
+                      <option key={b} value={b}>{b}</option>
+                    ))}
+                  </select>
+                </div>
+                {editMarca && (
+                  <div className="modal-form-group">
+                    <label>Modelo do Controle <span className="required">*</span></label>
+                    <select className="select-field" value={editModeloControle} onChange={e => setEditModeloControle(e.target.value)}>
+                      <option value="">Selecione o modelo do controle</option>
+                      {AC_BRANDS_MODELS[editMarca]?.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+
+            {editPerif.deviceType === 'tomada' && (
+              <div className="modal-form-row">
+                <div className="modal-form-group">
+                  <label>Tipo</label>
+                  <input className="input-field" placeholder="Ex: 220v" value={editTipoInput} onChange={e => setEditTipoInput(e.target.value)} />
+                </div>
+                <div className="modal-form-group">
+                  <label>IP</label>
+                  <input className="input-field" placeholder="Ex: 192.168.1.1" value={editIp} onChange={e => setEditIp(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {editPerif.deviceType !== 'ar_condicionado' && editPerif.deviceType !== 'tomada' && (
+              <div className="modal-form-group">
+                <label>Marca</label>
+                <input className="input-field" placeholder="Ex: Arno" value={editMarca} onChange={e => setEditMarca(e.target.value)} />
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowEditModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={handleEditSave}>Salvar</button>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Plus, Calendar, Search, ChevronDown } from 'lucide-react';
@@ -22,6 +22,15 @@ export default function Ambientes() {
   const [envCapacidade, setEnvCapacidade] = useState('');
   const [envAndar, setEnvAndar] = useState('');
 
+  // Edit env
+  const [showEditEnvModal, setShowEditEnvModal] = useState(false);
+  const [editingEnvId, setEditingEnvId] = useState(null);
+  const [editEnvNome, setEditEnvNome] = useState('');
+  const [editEnvTipo, setEditEnvTipo] = useState('');
+  const [editEnvArea, setEditEnvArea] = useState('');
+  const [editEnvCapacidade, setEditEnvCapacidade] = useState('');
+  const [editEnvAndar, setEditEnvAndar] = useState('');
+
   // Schedule form
   const [schedAmbiente, setSchedAmbiente] = useState('');
   const [schedTitulo, setSchedTitulo] = useState('');
@@ -41,6 +50,8 @@ export default function Ambientes() {
             nome: data.dados?.nome || d.id,
             tipo: data.config?.tipo || data.tipo || '',
             andar: data.config?.andar || data.andar || '',
+            area: data.config?.area || '',
+            capacidade: data.config?.capacidade || '',
             temperatura: data.sensores?.temperatura || 0,
             umidade: data.sensores?.umidade || 0,
             aqi: data.sensores?.AQI || 0,
@@ -83,6 +94,41 @@ export default function Ambientes() {
 
     setShowNewEnvModal(false);
     setEnvNome(''); setEnvTipo(''); setEnvArea(''); setEnvCapacidade(''); setEnvAndar('');
+  };
+
+  const openEditEnv = (env) => {
+    setEditingEnvId(env.id);
+    setEditEnvNome(env.nome);
+    setEditEnvTipo(env.tipo);
+    setEditEnvArea(env.area || '');
+    setEditEnvCapacidade(env.capacidade || '');
+    setEditEnvAndar(env.andar || '');
+    setOpenMenuId(null);
+    setShowEditEnvModal(true);
+  };
+
+  const handleEditEnv = async () => {
+    if (!editEnvNome || !editEnvTipo) return;
+    try {
+      const docRef = doc(db, 'empresas', empresaId, 'ambientes', editingEnvId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        await updateDoc(docRef, {
+          ...(snap.data().dados ? { 'dados.nome': editEnvNome } : {}),
+          'config.tipo': editEnvTipo,
+          'config.area': editEnvArea,
+          'config.capacidade': editEnvCapacidade,
+          'config.andar': editEnvAndar,
+          tipo: editEnvTipo,
+          andar: editEnvAndar,
+          area: editEnvArea,
+          capacidade: editEnvCapacidade,
+        });
+      }
+      setShowEditEnvModal(false);
+    } catch (e) {
+      console.error('Erro ao editar ambiente:', e);
+    }
   };
 
   const handleSchedule = async () => {
@@ -160,6 +206,12 @@ export default function Ambientes() {
               {openMenuId === env.id && (
                 <div style={{ position: 'absolute', top: 40, right: 8, backgroundColor: 'white', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, overflow: 'hidden' }}>
                   <button
+                    onClick={e => { e.stopPropagation(); openEditEnv(env); }}
+                    style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#2563EB', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}
+                  >
+                    Editar
+                  </button>
+                  <button
                     onClick={e => { e.stopPropagation(); handleDeleteEnv(env.id); }}
                     style={{ padding: '8px 16px', border: 'none', background: 'none', color: '#EF4444', fontSize: 13, cursor: 'pointer', display: 'block', width: '100%', textAlign: 'left' }}
                   >
@@ -218,6 +270,42 @@ export default function Ambientes() {
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowNewEnvModal(false)}>Cancelar</button>
               <button className="btn-primary" onClick={handleCreateEnv}>Criar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Environment Modal */}
+      {showEditEnvModal && (
+        <div className="modal-overlay" onClick={() => setShowEditEnvModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h2 className="modal-title">Editar Ambiente</h2>
+            <p className="modal-subtitle">Atualize as informações do ambiente</p>
+            <div className="modal-form-group">
+              <label>Nome do Ambiente <span className="required">*</span></label>
+              <input className="input-field" placeholder="Ex: Sala de Reunião 1" value={editEnvNome} onChange={e => setEditEnvNome(e.target.value)} />
+            </div>
+            <div className="modal-form-group">
+              <label>Tipo <span className="required">*</span></label>
+              <input className="input-field" placeholder="Ex: Escritório/Sala de Reunião/Depósito" value={editEnvTipo} onChange={e => setEditEnvTipo(e.target.value)} />
+            </div>
+            <div className="modal-form-row">
+              <div className="modal-form-group">
+                <label>Área (m²)</label>
+                <input className="input-field" placeholder="Ex: 50" value={editEnvArea} onChange={e => setEditEnvArea(e.target.value)} />
+              </div>
+              <div className="modal-form-group">
+                <label>Capacidade</label>
+                <input className="input-field" placeholder="Ex: 10" value={editEnvCapacidade} onChange={e => setEditEnvCapacidade(e.target.value)} />
+              </div>
+            </div>
+            <div className="modal-form-group">
+              <label>Andar/Localização</label>
+              <input className="input-field" placeholder="Ex: 2º Andar" value={editEnvAndar} onChange={e => setEditEnvAndar(e.target.value)} />
+            </div>
+            <div className="modal-actions">
+              <button className="btn-secondary" onClick={() => setShowEditEnvModal(false)}>Cancelar</button>
+              <button className="btn-primary" onClick={handleEditEnv}>Salvar</button>
             </div>
           </div>
         </div>
