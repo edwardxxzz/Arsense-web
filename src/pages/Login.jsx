@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { doc, setDoc, collection, addDoc, collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import logoImg from '../assets/logo.png';
+import googleImg from '../assets/google.png';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -35,6 +37,10 @@ export default function Login() {
   // Recuperação
   const [recoveryEmail, setRecoveryEmail] = useState('');
   const [recoverySuccess, setRecoverySuccess] = useState(false);
+
+  // Google Sign-In
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleError, setGoogleError] = useState('');
 
   // Validações login
   const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail);
@@ -152,6 +158,37 @@ export default function Login() {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setGoogleLoading(true);
+    setGoogleError('');
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      const uid = result.user.uid;
+
+      // Verificar se o usuário já está cadastrado na coleção empresas/{id}/usuarios
+      const q = query(collectionGroup(db, 'usuarios'), where('userId', '==', uid));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        // Usuário já cadastrado — redirecionar para home
+        navigate('/home');
+      } else {
+        // Usuário novo — precisa completar cadastro (empresa + senha)
+        await signOut(auth);
+        setGoogleError('Conta Google não vinculada a uma empresa. Por favor, cadastre-se primeiro.');
+      }
+    } catch (error) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        // Usuário fechou o popup, não mostrar erro
+      } else {
+        setGoogleError('Erro ao entrar com Google. Tente novamente.');
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   const handleRecovery = async (e) => {
     e.preventDefault();
     try {
@@ -223,8 +260,13 @@ export default function Login() {
                 </button>
               </form>
 
+              {googleError && <p className="error-text" style={{ textAlign: 'center', marginBottom: '10px' }}>{googleError}</p>}
+
               <div className="separator"><span>ou continue com</span></div>
-              <button className="btn btn-social-google">Entrar com o Google</button>
+              <button type="button" className="btn btn-social-google" onClick={handleGoogleLogin} disabled={googleLoading}>
+                <img src={googleImg} alt="Google" style={{ width: 20, height: 20 }} />
+                {googleLoading ? 'Entrando...' : 'Entrar com o Google'}
+              </button>
             </section>
           </main>
         )}
