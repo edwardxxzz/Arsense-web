@@ -18,6 +18,8 @@ export function AuthProvider({ children }) {
         setUser(firebaseUser);
         setNeedsCompanySetup(false);
         try {
+          const emailLower = (firebaseUser.email || '').toLowerCase().trim();
+
           // 1. Buscar por UID (login normal ou Google já vinculado)
           const uidQ = query(collectionGroup(db, 'usuarios'), where('userId', '==', firebaseUser.uid));
           const uidSnapshot = await getDocs(uidQ);
@@ -31,8 +33,9 @@ export function AuthProvider({ children }) {
             setEmpresaId(companyId);
             setNeedsCompanySetup(false);
           } else {
-            // 2. Não encontrado por UID — buscar por email para vincular contas
-            const emailQ = query(collectionGroup(db, 'usuarios'), where('email', '==', firebaseUser.email));
+            // 2. Não encontrado por UID — buscar por email (lowercase) para vincular contas
+            // Isso resolve o caso: cadastro manual ruan@gmail.com + login Google ruan@gmail.com
+            const emailQ = query(collectionGroup(db, 'usuarios'), where('emailLowercase', '==', emailLower));
             const emailSnapshot = await getDocs(emailQ);
 
             if (!emailSnapshot.empty) {
@@ -45,8 +48,11 @@ export function AuthProvider({ children }) {
               await setDoc(doc(db, 'empresas', companyId, 'usuarios', firebaseUser.uid), {
                 ...existingData,
                 userId: firebaseUser.uid,
+                email: firebaseUser.email || existingData.email,
+                emailLowercase: emailLower,
                 photoURL: firebaseUser.photoURL || existingData.photoURL || '',
                 authProvider: 'google',
+                linkedAt: new Date().toISOString(),
               });
 
               setUserData({
@@ -57,8 +63,43 @@ export function AuthProvider({ children }) {
               setEmpresaId(companyId);
               setNeedsCompanySetup(false);
             } else {
-              // 3. Nem por UID nem por email — usuário novo, precisa completar cadastro
-              setNeedsCompanySetup(true);
+              // 3. Tentar busca direta sem emailLowercase (compatibilidade com registros antigos)
+              const emailDirectQ = query(collectionGroup(db, 'usuarios'), where('email', '==', firebaseUser.email));
+              const emailDirectSnapshot = await getDocs(emailDirectQ);
+
+              if (!emailDirectSnapshot.empty) {
+                const existingDoc = emailDirectSnapshot.docs[0];
+                const existingData = existingDoc.data();
+                const companyId = existingDoc.ref.parent.parent?.id;
+
+                // Criar documento de usuário com o UID do Google na mesma empresa
+                await setDoc(doc(db, 'empresas', companyId, 'usuarios', firebaseUser.uid), {
+                  ...existingData,
+                  userId: firebaseUser.uid,
+                  email: firebaseUser.email || existingData.email,
+                  emailLowercase: emailLower,
+                  photoURL: firebaseUser.photoURL || existingData.photoURL || '',
+                  authProvider: 'google',
+                  linkedAt: new Date().toISOString(),
+                });
+
+                // Atualizar o documento original para incluir emailLowercase
+                await setDoc(doc(db, 'empresas', companyId, 'usuarios', existingDoc.id), {
+                  ...existingData,
+                  emailLowercase: emailLower,
+                }, { merge: true });
+
+                setUserData({
+                  ...existingData,
+                  userId: firebaseUser.uid,
+                  photoURL: firebaseUser.photoURL || existingData.photoURL || '',
+                });
+                setEmpresaId(companyId);
+                setNeedsCompanySetup(false);
+              } else {
+                // 4. Nem por UID nem por email — usuário novo, precisa completar cadastro
+                setNeedsCompanySetup(true);
+              }
             }
           }
         } catch (error) {
@@ -77,13 +118,27 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
-  const completeCompanySetup = async (companyName) => {
+  const completeCompanySetup = async (companyName, password) => {
     if (!user) return;
 
     const uid = user.uid;
     const nomeEmpresa = companyName.trim();
     const nomeUsuario = user.displayName || user.email?.split('@')[0] || 'Usuário';
     const emailUsuario = user.email || '';
+    const emailLower = emailUsuario.toLowerCase().trim();
+    const isGoogleUser = user.providerData?.[0]?.providerId === 'google.com';
+
+    // Se é usuário Google e definiu senha, vincular email/password à conta Google
+    if (isGoogleUser && password) {
+      try {
+        const { EmailAuthProvider, linkWithCredential } = await import('firebase/auth');
+        const credential = EmailAuthProvider.credentialWithEmail(emailUsuario, password);
+        await linkWithCredential(user, credential);
+      } catch (linkError) {
+        console.error('Erro ao vincular credenciais:', linkError);
+        // Se falhar o link (ex: email já existe em outra conta Auth), continuamos mesmo assim
+      }
+    }
 
     // Criar empresa
     await setDoc(doc(db, 'empresas', nomeEmpresa), {
@@ -95,11 +150,12 @@ export function AuthProvider({ children }) {
     await setDoc(doc(db, 'empresas', nomeEmpresa, 'usuarios', uid), {
       dataLogin: new Date().toISOString(),
       email: emailUsuario,
-      senha: user.providerData?.[0]?.providerId === 'google.com' ? 'Gerenciada pelo Google' : 'Gerenciada pelo Firebase Auth',
+      emailLowercase: emailLower,
+      senha: isGoogleUser ? 'Gerenciada pelo Google' : 'Gerenciada pelo Firebase Auth',
       userId: uid,
       userName: nomeUsuario,
       photoURL: user.photoURL || '',
-      authProvider: user.providerData?.[0]?.providerId || 'password',
+      authProvider: isGoogleUser ? 'google' : 'password',
     });
 
     // Criar central

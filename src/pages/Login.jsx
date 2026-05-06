@@ -107,6 +107,7 @@ export default function Login() {
       await setDoc(doc(db, 'empresas', nomeEmpresa, 'usuarios', uid), {
         dataLogin: new Date().toISOString(),
         email: regEmail,
+        emailLowercase: regEmail.toLowerCase().trim(),
         senha: 'Gerenciada pelo Firebase Auth',
         userId: uid,
         userName: regName,

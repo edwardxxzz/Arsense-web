@@ -11,13 +11,22 @@ import Sidebar from './components/Sidebar';
 import TopHeader from './components/TopHeader';
 import DadosPessoais from './components/DadosPessoais';
 import { useState } from 'react';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import logoImg from './assets/logo.png';
 
 function CompleteRegistration() {
   const { user, completeCompanySetup, cancelCompanySetup } = useAuth();
+  const [step, setStep] = useState(1);
   const [companyName, setCompanyName] = useState('');
   const [companyError, setCompanyError] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [terms, setTerms] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Validações empresa
   const empresaValida = /^[a-zA-ZÀ-ÿ0-9\s]+$/.test(companyName) && companyName.trim().length > 0;
 
   const handleCompanyChange = (e) => {
@@ -30,14 +39,22 @@ function CompleteRegistration() {
     }
   };
 
+  // Validações senha
+  const senhaForte = password.length >= 8;
+  const senhasIguais = password === confirmPassword;
+  const erroConfirmacao = confirmPassword.length > 0 && !senhasIguais;
+
+  const podeContinuar = empresaValida;
+  const podeCriar = senhaForte && senhasIguais && terms;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!empresaValida) return;
+    if (!podeCriar) return;
     setLoading(true);
     try {
-      await completeCompanySetup(companyName);
+      await completeCompanySetup(companyName, password);
     } catch (error) {
-      alert('Erro ao criar empresa: ' + error.message);
+      alert('Erro ao criar conta: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -47,9 +64,7 @@ function CompleteRegistration() {
     <div className="bg-gradient">
       <div className="main-container">
         <header className="header">
-          <svg width="200" height="60" viewBox="0 0 200 60" fill="none">
-            <rect width="200" height="60" rx="8" fill="transparent"/>
-          </svg>
+          <img src={logoImg} alt="Logo @rsense" className="logo-img" />
         </header>
         <main className="form-wrapper">
           <nav className="form-tabs">
@@ -57,7 +72,7 @@ function CompleteRegistration() {
           </nav>
           <section className="form-section">
             <h1 className="form-title">Completar seu cadastro</h1>
-            <p className="form-subtitle">Sua conta Google foi autenticada. Agora, cadastre sua empresa.</p>
+            <p className="form-subtitle">Sua conta Google foi autenticada. Agora, complete seu registro.</p>
 
             <div style={{ textAlign: 'center', marginBottom: 20, padding: '12px', backgroundColor: '#F0F4FF', borderRadius: 8 }}>
               <p style={{ fontSize: 14, color: '#374151', marginBottom: 4 }}>
@@ -68,31 +83,88 @@ function CompleteRegistration() {
               </p>
             </div>
 
-            <form className="form" onSubmit={handleSubmit}>
-              <div className="input-group">
-                <label htmlFor="setupCompany">Nome da Empresa (sem caracteres especiais)</label>
-                <div className={`input-container ${(!empresaValida && companyName.length > 0) || companyError ? 'error-border' : ''}`}>
-                  <input
-                    type="text"
-                    id="setupCompany"
-                    placeholder="Nome da empresa"
-                    value={companyName}
-                    onChange={handleCompanyChange}
-                    autoFocus
-                  />
-                </div>
-                {companyError && <p className="error-text" style={{ marginTop: 4, fontSize: 12 }}>{companyError}</p>}
-              </div>
+            <div className={`progress-indicator ${step === 2 ? 'step-2' : ''}`}>
+              <div className={`circle ${step >= 1 ? 'active' : ''}`}>1</div>
+              <div className="progress-line"></div>
+              <div className={`circle ${step === 2 ? 'active' : ''}`}>2</div>
+            </div>
 
-              <div className="btn-group">
-                <button type="button" className="btn btn-secondary" onClick={cancelCompanySetup}>
-                  Cancelar
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={!empresaValida || loading}>
-                  {loading ? 'Criando...' : 'Criar conta →'}
-                </button>
-              </div>
-            </form>
+            {step === 1 ? (
+              <form className="form" onSubmit={(e) => { e.preventDefault(); if (podeContinuar) setStep(2); }}>
+                <div className="input-group">
+                  <label htmlFor="setupCompany">Nome da Empresa (sem caracteres especiais)</label>
+                  <div className={`input-container ${(!empresaValida && companyName.length > 0) || companyError ? 'error-border' : ''}`}>
+                    <input
+                      type="text"
+                      id="setupCompany"
+                      placeholder="Nome da empresa"
+                      value={companyName}
+                      onChange={handleCompanyChange}
+                      autoFocus
+                    />
+                  </div>
+                  {companyError && <p className="error-text" style={{ marginTop: 4, fontSize: 12 }}>{companyError}</p>}
+                </div>
+
+                <button type="submit" className="btn btn-primary" disabled={!podeContinuar}>Continuar →</button>
+              </form>
+            ) : (
+              <form className="form" onSubmit={handleSubmit}>
+                <div className="input-group">
+                  <label htmlFor="setupPassword">Senha</label>
+                  <div className={`input-container password-input-container ${!senhaForte && password.length > 0 ? 'error-border' : ''}`}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      id="setupPassword"
+                      placeholder="Mínimo 8 caracteres"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      required
+                    />
+                    <span className="password-icon" onClick={() => setShowPassword(!showPassword)}>
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </span>
+                  </div>
+                </div>
+                <p className="password-hint">Use letras maiúsculas, minúsculas, números e símbolos</p>
+
+                <div className="input-group">
+                  <label htmlFor="setupConfirmPassword">Confirma Senha</label>
+                  <div className={`input-container password-input-container ${erroConfirmacao ? 'error-border' : ''}`}>
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      id="setupConfirmPassword"
+                      placeholder="Digite novamente"
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      required
+                    />
+                    <span className="password-icon" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
+                      {showConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="input-checkbox">
+                  <input type="checkbox" id="setupTerms" checked={terms}
+                    onChange={e => setTerms(e.target.checked)} required />
+                  <label htmlFor="setupTerms">Concordo com os Termos de Uso e Política de Privacidade</label>
+                </div>
+
+                <div className="btn-group">
+                  <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>Voltar</button>
+                  <button type="submit" className="btn btn-primary" disabled={!podeCriar || loading}>
+                    {loading ? 'Criando...' : 'Criar conta →'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div style={{ textAlign: 'center', marginTop: 16 }}>
+              <button type="button" onClick={cancelCompanySetup} style={{ background: 'none', border: 'none', color: '#6B7280', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+                Cancelar e voltar ao login
+              </button>
+            </div>
           </section>
         </main>
       </div>
