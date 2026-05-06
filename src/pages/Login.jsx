@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc, collection, addDoc, collectionGroup, query, where, getDocs } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
 import { auth, db } from '../firebase';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import logoImg from '../assets/logo.png';
@@ -41,10 +40,6 @@ export default function Login() {
   // Google Sign-In
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState('');
-  const [googleUser, setGoogleUser] = useState(null); // dados do Google aguardando completar cadastro
-  const [googleCompanyName, setGoogleCompanyName] = useState('');
-  const [googleCompanyError, setGoogleCompanyError] = useState('');
-  const [googleCompleteLoading, setGoogleCompleteLoading] = useState(false);
 
   // Validações login
   const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail);
@@ -167,130 +162,22 @@ export default function Login() {
     setGoogleError('');
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const uid = result.user.uid;
-
-      // Verificar se o usuário já está cadastrado na coleção empresas/{id}/usuarios
-      const q = query(collectionGroup(db, 'usuarios'), where('userId', '==', uid));
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        // Usuário já cadastrado — redirecionar para home
-        navigate('/home');
-      } else {
-        // Usuário novo — armazenar dados do Google e mostrar formulário para completar cadastro
-        setGoogleUser({
-          uid,
-          displayName: result.user.displayName || '',
-          email: result.user.email || '',
-          photoURL: result.user.photoURL || '',
-        });
-      }
+      await signInWithPopup(auth, provider);
+      // Após o sucesso, o onAuthStateChanged no AuthContext resolve tudo:
+      // - Se já tem empresa → vai para dashboard
+      // - Se mesmo email já existe → vincula automaticamente
+      // - Se é novo → mostra CompleteRegistration
     } catch (error) {
       if (error.code === 'auth/popup-closed-by-user') {
         // Usuário fechou o popup, não mostrar erro
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        setGoogleError('Já existe uma conta com esse email. Faça login com email e senha, depois vincule o Google nas configurações.');
       } else {
         setGoogleError('Erro ao entrar com Google. Tente novamente.');
       }
     } finally {
       setGoogleLoading(false);
     }
-  };
-
-  const handleGoogleCompanyChange = (e) => {
-    const val = e.target.value;
-    if (/^[a-zA-ZÀ-ÿ0-9\s]*$/.test(val)) {
-      setGoogleCompanyName(val);
-      setGoogleCompanyError('');
-    } else {
-      setGoogleCompanyError('Não é permitido usar caracteres especiais no nome da empresa');
-    }
-  };
-
-  const googleEmpresaValida = /^[a-zA-ZÀ-ÿ0-9\s]+$/.test(googleCompanyName) && googleCompanyName.trim().length > 0;
-
-  const handleGoogleComplete = async (e) => {
-    e.preventDefault();
-    if (!googleEmpresaValida || !googleUser) return;
-
-    setGoogleCompleteLoading(true);
-    try {
-      const uid = googleUser.uid;
-      const nomeEmpresa = googleCompanyName.trim();
-      const nomeUsuario = googleUser.displayName || 'Usuário Google';
-      const emailUsuario = googleUser.email;
-
-      // Criar empresa
-      await setDoc(doc(db, 'empresas', nomeEmpresa), {
-        nome: nomeEmpresa,
-        criadoEm: new Date().toISOString(),
-      }, { merge: true });
-
-      // Criar usuário
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'usuarios', uid), {
-        dataLogin: new Date().toISOString(),
-        email: emailUsuario,
-        senha: 'Gerenciada pelo Google',
-        userId: uid,
-        userName: nomeUsuario,
-        photoURL: googleUser.photoURL || '',
-      });
-
-      // Criar central
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'centrais', 'macRPI'), {
-        ip_local: '',
-        nome: '',
-        online: false,
-      });
-
-      // Criar ambiente padrão
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1'), {
-        config: { andar: '', area: '', nome: '', tipo: '' },
-        dados: { central_id: 'central 1', criadoEM: new Date().toISOString(), nome: 'ambiente 1', receptor_id: 'receptor1' },
-        sensores: { iluminação: 0, presenca: false, temperatura: 0, umidade: 0 },
-      }, { merge: true });
-
-      // Histórico do ambiente
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'historico', 'registro_inicial'), {
-        co2: 0, qualidade_ar: 100, temperatura: 0, umidade: 0,
-        timestamp: new Date().toISOString(), luminosidade: 0, presenca: 0,
-      });
-
-      // Periféricos
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'perifericos', 'ar_condicionado'), {
-        geral: { ligado: false, marca: '', modelo: '', temperatura: 24 },
-      });
-
-      // Agendamentos
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'agendamentos', 'registro_inicial'), {
-        timestamp: new Date().toISOString(), status: 'inicializado', observacao: 'Registro inicial',
-      });
-
-      // Histórico geral
-      await addDoc(collection(db, 'empresas', nomeEmpresa, 'historico_geral'), {
-        co2_medio: 0, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        indice_conforto: 0, qual_do_ar: 0, temperatura_media: 0,
-        timestamp: Date.now(), luminosidade: 0, presenca: 0,
-      });
-
-      // Limpar estado do Google e navegar
-      setGoogleUser(null);
-      setGoogleCompanyName('');
-      navigate('/home');
-    } catch (error) {
-      alert('Erro ao completar cadastro: ' + error.message);
-    } finally {
-      setGoogleCompleteLoading(false);
-    }
-  };
-
-  const handleGoogleCancel = async () => {
-    try {
-      await signOut(auth);
-    } catch (e) { /* ignore */ }
-    setGoogleUser(null);
-    setGoogleCompanyName('');
-    setGoogleCompanyError('');
   };
 
   const handleRecovery = async (e) => {
@@ -366,39 +253,11 @@ export default function Login() {
 
               {googleError && <p className="error-text" style={{ textAlign: 'center', marginBottom: '10px' }}>{googleError}</p>}
 
-              {googleUser ? (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: '#374151', marginBottom: 4 }}>Completar cadastro</p>
-                    <p style={{ fontSize: 12, color: '#6B7280' }}>Conta Google: <strong>{googleUser.email}</strong></p>
-                    <p style={{ fontSize: 12, color: '#6B7280' }}>Nome: <strong>{googleUser.displayName || 'Não informado'}</strong></p>
-                  </div>
-                  <form className="form" onSubmit={handleGoogleComplete}>
-                    <div className="input-group">
-                      <label htmlFor="googleCompany">Nome da Empresa (sem caracteres especiais)</label>
-                      <div className={`input-container ${(!googleEmpresaValida && googleCompanyName.length > 0) || googleCompanyError ? 'error-border' : ''}`}>
-                        <input type="text" id="googleCompany" placeholder="Nome da empresa" value={googleCompanyName}
-                          onChange={handleGoogleCompanyChange} />
-                      </div>
-                      {googleCompanyError && <p className="error-text" style={{ marginTop: 4, fontSize: 12 }}>{googleCompanyError}</p>}
-                    </div>
-                    <div className="btn-group">
-                      <button type="button" className="btn btn-secondary" onClick={handleGoogleCancel}>Cancelar</button>
-                      <button type="submit" className="btn btn-primary" disabled={!googleEmpresaValida || googleCompleteLoading}>
-                        {googleCompleteLoading ? 'Criando...' : 'Criar conta →'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              ) : (
-                <>
-                  <div className="separator"><span>ou continue com</span></div>
-                  <button type="button" className="btn btn-social-google" onClick={handleGoogleLogin} disabled={googleLoading}>
-                    <img src={googleImg} alt="Google" style={{ width: 20, height: 20 }} />
-                    {googleLoading ? 'Entrando...' : 'Entrar com o Google'}
-                  </button>
-                </>
-              )}
+              <div className="separator"><span>ou continue com</span></div>
+              <button type="button" className="btn btn-social-google" onClick={handleGoogleLogin} disabled={googleLoading}>
+                <img src={googleImg} alt="Google" style={{ width: 20, height: 20 }} />
+                {googleLoading ? 'Entrando...' : 'Entrar com o Google'}
+              </button>
             </section>
           </main>
         )}
