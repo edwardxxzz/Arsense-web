@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collectionGroup, query, where, getDocs, doc, setDoc, addDoc, collection, updateDoc } from 'firebase/firestore';
+import { collectionGroup, query, where, getDocs, doc, setDoc, addDoc, collection } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 const AuthContext = createContext(null);
@@ -13,12 +13,24 @@ export function AuthProvider({ children }) {
   const [needsCompanySetup, setNeedsCompanySetup] = useState(false);
   const [googlePendingData, setGooglePendingData] = useState(null);
 
+  // Guarda para impedir que onAuthStateChanged execute buscas no Firestore
+  // durante o processo de cadastro manual (evita condição de corrida)
+  const registeringRef = useRef(false);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
+
+        // Se o cadastro está em andamento, NÃO buscar no Firestore
+        // O handler de cadastro vai chamar finishRegistration() diretamente
+        if (registeringRef.current) {
+          return;
+        }
+
         setNeedsCompanySetup(false);
         setGooglePendingData(null);
+
         try {
           const emailLower = (firebaseUser.email || '').toLowerCase().trim();
 
@@ -35,7 +47,7 @@ export function AuthProvider({ children }) {
             setEmpresaId(companyId);
             setNeedsCompanySetup(false);
           } else {
-            // 2. Não encontrado por UID — buscar por email para vincular
+            // 2. Não encontrado por UID — buscar por email para criar "irmão" na mesma empresa
             let emailMatch = null;
 
             // Buscar por emailLowercase
@@ -55,26 +67,33 @@ export function AuthProvider({ children }) {
             }
 
             if (emailMatch) {
-              // Email já existe — VINCULAR: atualizar o documento existente com o UID do Google
-              const existingDoc = emailMatch.doc;
+              // Email já existe — criar documento "irmão" na mesma empresa
+              const companyId = emailMatch.doc.ref.parent.parent?.id;
               const existingData = emailMatch.data;
-              const companyId = existingDoc.ref.parent.parent?.id;
-              const existingDocId = existingDoc.id;
 
-              // Atualizar o documento do usuário original com o novo UID do Google
-              await updateDoc(doc(db, 'empresas', companyId, 'usuarios', existingDocId), {
-                userId: firebaseUser.uid,
+              // Criar novo doc de usuário para este UID na mesma empresa
+              const siblingUserName = firebaseUser.displayName || existingData.userName || firebaseUser.email?.split('@')[0] || 'Usuário';
+              await setDoc(doc(db, 'empresas', companyId, 'usuarios', firebaseUser.uid), {
+                dataLogin: new Date().toISOString(),
+                email: firebaseUser.email,
                 emailLowercase: emailLower,
-                photoURL: firebaseUser.photoURL || existingData.photoURL || '',
-                authProvider: 'google_linked',
+                userId: firebaseUser.uid,
+                userName: siblingUserName,
+                photoURL: firebaseUser.photoURL || '',
+                authProvider: firebaseUser.providerData?.[0]?.providerId || 'google.com',
+                siblingOf: existingData.userId,
                 linkedAt: new Date().toISOString(),
               });
 
               setUserData({
-                ...existingData,
-                docId: existingDocId,
+                dataLogin: new Date().toISOString(),
+                email: firebaseUser.email,
+                emailLowercase: emailLower,
                 userId: firebaseUser.uid,
-                photoURL: firebaseUser.photoURL || existingData.photoURL || '',
+                userName: siblingUserName,
+                photoURL: firebaseUser.photoURL || '',
+                authProvider: firebaseUser.providerData?.[0]?.providerId || 'google.com',
+                docId: firebaseUser.uid,
               });
               setEmpresaId(companyId);
               setNeedsCompanySetup(false);
@@ -107,6 +126,21 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
+  // Chamado ANTES de createUserWithEmailAndPassword para evitar condição de corrida
+  const startRegistration = () => {
+    registeringRef.current = true;
+  };
+
+  // Chamado DEPOIS de criar os docs no Firestore para definir o estado corretamente
+  const finishRegistration = (newEmpresaId, newUserData) => {
+    setEmpresaId(newEmpresaId);
+    setUserData(newUserData);
+    setNeedsCompanySetup(false);
+    setGooglePendingData(null);
+    registeringRef.current = false;
+    setLoading(false);
+  };
+
   const clearGooglePending = () => {
     setGooglePendingData(null);
     setNeedsCompanySetup(false);
@@ -120,7 +154,7 @@ export function AuthProvider({ children }) {
     const nomeUsuario = userName || user.displayName || user.email?.split('@')[0] || 'Usuário';
     const emailUsuario = user.email || '';
     const emailLower = emailUsuario.toLowerCase().trim();
-    const isGoogleUser = user.providerData?.[0]?.providerId === 'google.com';
+    const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com');
 
     // Se é usuário Google e definiu senha, vincular email/password à conta Google
     if (isGoogleUser && password) {
@@ -129,7 +163,12 @@ export function AuthProvider({ children }) {
         const credential = EmailAuthProvider.credentialWithEmail(emailUsuario, password);
         await linkWithCredential(user, credential);
       } catch (linkError) {
-        console.error('Erro ao vincular credenciais:', linkError);
+        // Se o email já está em uso por outra conta, apenas logar — não bloquear o cadastro
+        if (linkError.code === 'auth/email-already-in-use' || linkError.code === 'auth/credential-already-in-use') {
+          console.warn('Credencial já vinculada a outra conta. Prosseguindo com o cadastro.');
+        } else {
+          console.error('Erro ao vincular credenciais:', linkError);
+        }
       }
     }
 
@@ -193,12 +232,16 @@ export function AuthProvider({ children }) {
     setUserData({
       dataLogin: new Date().toISOString(),
       email: emailUsuario,
+      emailLowercase: emailLower,
       userId: uid,
       userName: nomeUsuario,
       photoURL: user.photoURL || '',
+      authProvider: isGoogleUser ? 'google' : 'password',
+      docId: uid,
     });
     setNeedsCompanySetup(false);
     setGooglePendingData(null);
+    registeringRef.current = false;
   };
 
   const cancelCompanySetup = async () => {
@@ -210,6 +253,7 @@ export function AuthProvider({ children }) {
     setEmpresaId(null);
     setNeedsCompanySetup(false);
     setGooglePendingData(null);
+    registeringRef.current = false;
   };
 
   const logout = async () => {
@@ -220,6 +264,7 @@ export function AuthProvider({ children }) {
       setEmpresaId(null);
       setNeedsCompanySetup(false);
       setGooglePendingData(null);
+      registeringRef.current = false;
     } catch (error) {
       console.error('Erro ao sair:', error);
     }
@@ -241,7 +286,8 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, userData, empresaId, loading, logout, getUserInitials,
       needsCompanySetup, completeCompanySetup, cancelCompanySetup,
-      googlePendingData, clearGooglePending
+      googlePendingData, clearGooglePending,
+      startRegistration, finishRegistration
     }}>
       {children}
     </AuthContext.Provider>

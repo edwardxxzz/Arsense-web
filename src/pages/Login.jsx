@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider, fetchSignInMethodsForEmail, EmailAuthProvider, linkWithCredential } from 'firebase/auth';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +10,11 @@ import googleImg from '../assets/google.png';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { googlePendingData, clearGooglePending, completeCompanySetup, cancelCompanySetup, user } = useAuth();
+  const {
+    googlePendingData, clearGooglePending, completeCompanySetup,
+    cancelCompanySetup, user, startRegistration, finishRegistration,
+    empresaId
+  } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
 
   // Se tem googlePendingData, forçar tab cadastro
@@ -19,6 +23,13 @@ export default function Login() {
       setActiveTab('cadastro');
     }
   }, [googlePendingData]);
+
+  // Se o usuário está logado e tem empresa, redirecionar para dashboard
+  useEffect(() => {
+    if (user && empresaId && !googlePendingData) {
+      navigate('/home');
+    }
+  }, [user, empresaId, googlePendingData, navigate]);
 
   // Login
   const [loginEmail, setLoginEmail] = useState('');
@@ -95,7 +106,8 @@ export default function Login() {
     setLoginLoading(true);
     try {
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      navigate('/home');
+      // onAuthStateChanged no AuthContext vai setar empresaId automaticamente
+      // O useEffect acima vai redirecionar para /home
     } catch (error) {
       setErroLogin(true);
     } finally {
@@ -117,8 +129,11 @@ export default function Login() {
       if (isGoogleSignup) {
         // Cadastro via Google — usar completeCompanySetup do AuthContext
         await completeCompanySetup(regCompany, regPassword, regName);
+        navigate('/home');
       } else {
-        // Cadastro normal
+        // Cadastro normal — AVISAR o AuthContext para ignorar onAuthStateChanged
+        startRegistration();
+
         const userCredential = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
         const uid = userCredential.user.uid;
         const nomeEmpresa = regCompany;
@@ -137,6 +152,7 @@ export default function Login() {
           senha: 'Gerenciada pelo Firebase Auth',
           userId: uid,
           userName: regName,
+          authProvider: 'password',
         });
 
         // Criar central
@@ -175,9 +191,20 @@ export default function Login() {
           indice_conforto: 0, qual_do_ar: 0, temperatura_media: 0,
           timestamp: Date.now(), luminosidade: 0, presenca: 0,
         });
-      }
 
-      navigate('/home');
+        // INFORMAR o AuthContext que o cadastro terminou — define empresaId e userData
+        finishRegistration(nomeEmpresa, {
+          dataLogin: new Date().toISOString(),
+          email: regEmail,
+          emailLowercase: regEmail.toLowerCase().trim(),
+          userId: uid,
+          userName: regName,
+          authProvider: 'password',
+          docId: uid,
+        });
+
+        navigate('/home');
+      }
     } catch (error) {
       alert('Erro ao criar conta: ' + error.message);
     } finally {
@@ -192,12 +219,27 @@ export default function Login() {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       // Após o sucesso, o onAuthStateChanged no AuthContext resolve tudo:
-      // - Se já tem empresa → vai para dashboard
-      // - Se mesmo email já existe → vincula automaticamente (atualiza userId)
-      // - Se é novo → seta googlePendingData → Login vai para tab Cadastrar
+      // - Se já tem empresa → vai para dashboard (via useEffect)
+      // - Se mesmo email já existe → cria "irmão" na mesma empresa (via useEffect)
+      // - Se é novo → seta googlePendingData → Login vai para tab Cadastrar (via useEffect)
     } catch (error) {
       if (error.code === 'auth/popup-closed-by-user') {
         // Usuário fechou o popup, não mostrar erro
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        // Firebase Auth com "One account per email" — tentar vincular
+        try {
+          const email = error.customData?.email;
+          if (email) {
+            const methods = await fetchSignInMethodsForEmail(auth, email);
+            if (methods.includes('password')) {
+              setGoogleError('Já existe uma conta com este email. Entre com email e senha, depois vincule o Google em Dados Pessoais.');
+            } else {
+              setGoogleError('Já existe uma conta com este email usando outro método de login.');
+            }
+          }
+        } catch (e) {
+          setGoogleError('Erro ao verificar conta existente. Tente login manual.');
+        }
       } else {
         setGoogleError('Erro ao entrar com Google. Tente novamente.');
       }

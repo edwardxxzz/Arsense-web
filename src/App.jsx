@@ -13,7 +13,7 @@ import DadosPessoais from './components/DadosPessoais';
 import { useState } from 'react';
 
 function AppLayout() {
-  const { user, empresaId, loading, needsCompanySetup } = useAuth();
+  const { user, empresaId, loading, needsCompanySetup, googlePendingData } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
 
   if (loading) {
@@ -31,9 +31,12 @@ function AppLayout() {
     );
   }
 
-  // Sem usuário autenticado OU usuário Google que precisa completar cadastro → mostrar Login
-  // O Login component detecta googlePendingData e vai direto para a tab Cadastrar
-  if (!user || needsCompanySetup || !empresaId) {
+  // Sem usuário autenticado → Login
+  // Com usuário mas sem empresa (needsCompanySetup) → Login com aba Cadastro (googlePendingData controla isso)
+  // Com usuário e empresa → Dashboard
+  const showLogin = !user || needsCompanySetup || !empresaId;
+
+  if (showLogin) {
     return <Login />;
   }
 

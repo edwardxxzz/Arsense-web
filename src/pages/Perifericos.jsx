@@ -169,6 +169,10 @@ export default function Perifericos() {
 
   const handleEditSave = async () => {
     if (!editPerif || !editNome) return;
+    if (editPerif.deviceType === 'tomada' && editIp && !isValidIP(editIp)) {
+      alert('IP inválido. Use o formato xxx.xxx.xxx.xxx (0-255 por octeto).');
+      return;
+    }
     try {
       const docRef = doc(db, 'empresas', empresaId, 'ambientes', editPerif.ambienteId, 'perifericos', editPerif.deviceType);
       const updates = {
@@ -191,14 +195,29 @@ export default function Perifericos() {
     }
   };
 
+  const isValidIP = (ipStr) => {
+    if (!ipStr) return true; // IP é opcional
+    const parts = ipStr.split('.');
+    if (parts.length !== 4) return false;
+    return parts.every(part => {
+      const num = Number(part);
+      return part !== '' && !isNaN(num) && num >= 0 && num <= 255 && part === String(num);
+    });
+  };
+
   const handleCreate = async () => {
     if (!nome || !ambiente || !tipo) return;
     if (tipo === 'ar_condicionado' && (!marca || !modeloControle)) return;
     if (nome.toLowerCase() === 'geral') return;
+    if (tipo === 'tomada' && ip && !isValidIP(ip)) {
+      alert('IP inválido. Use o formato xxx.xxx.xxx.xxx (0-255 por octeto).');
+      return;
+    }
 
     const effectiveTipo = tipo === 'outro' ? tipoInput.replace(/[.#$\[\]]/g, '_').replace(/\s+/g, '_') : tipo;
 
     try {
+      // Validar IP para tomada
       const docRef = doc(db, 'empresas', empresaId, 'ambientes', ambiente, 'perifericos', effectiveTipo);
       const snap = await getDoc(docRef);
       let existing = snap.exists() ? snap.data() : {};
