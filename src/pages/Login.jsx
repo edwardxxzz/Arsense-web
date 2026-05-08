@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider, fetchSignInMethodsForEmail, EmailAuthProvider, linkWithCredential } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -13,23 +13,22 @@ export default function Login() {
   const {
     googlePendingData, clearGooglePending, completeCompanySetup,
     cancelCompanySetup, user, startRegistration, finishRegistration,
-    empresaId
+    empresaId, loading: authLoading
   } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
 
-  // Se tem googlePendingData, forçar tab cadastro
-  useEffect(() => {
-    if (googlePendingData) {
-      setActiveTab('cadastro');
-    }
-  }, [googlePendingData]);
+  // Se tem googlePendingData, FORÇAR tab cadastro (não depende de useEffect)
+  const effectiveTab = googlePendingData ? 'cadastro' : activeTab;
 
-  // Se o usuário está logado e tem empresa, redirecionar para dashboard
+  // Se o usuário está autenticado e tem empresa, redirecionar para dashboard
   useEffect(() => {
     if (user && empresaId && !googlePendingData) {
       navigate('/home');
     }
   }, [user, empresaId, googlePendingData, navigate]);
+
+  // Pré-preencher campos quando googlePendingData muda
+  const isGoogleSignup = !!googlePendingData;
 
   // Login
   const [loginEmail, setLoginEmail] = useState('');
@@ -61,7 +60,7 @@ export default function Login() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState('');
 
-  // Pré-preencher campos quando googlePendingData muda
+  // Pré-preencher quando googlePendingData muda
   useEffect(() => {
     if (googlePendingData) {
       setRegName(googlePendingData.displayName || '');
@@ -69,9 +68,6 @@ export default function Login() {
       setStep(1);
     }
   }, [googlePendingData]);
-
-  // Se é cadastro via Google
-  const isGoogleSignup = !!googlePendingData;
 
   // Validações login
   const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail);
@@ -192,7 +188,7 @@ export default function Login() {
           timestamp: Date.now(), luminosidade: 0, presenca: 0,
         });
 
-        // INFORMAR o AuthContext que o cadastro terminou — define empresaId e userData
+        // INFORMAR o AuthContext que o cadastro terminou
         finishRegistration(nomeEmpresa, {
           dataLogin: new Date().toISOString(),
           email: regEmail,
@@ -217,29 +213,16 @@ export default function Login() {
     setGoogleError('');
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
       // Após o sucesso, o onAuthStateChanged no AuthContext resolve tudo:
-      // - Se já tem empresa → vai para dashboard (via useEffect)
-      // - Se mesmo email já existe → cria "irmão" na mesma empresa (via useEffect)
-      // - Se é novo → seta googlePendingData → Login vai para tab Cadastrar (via useEffect)
+      // - Se já tem empresa → vai para dashboard (via useEffect de redirect)
+      // - Se mesmo email já existe → cria "irmão" na mesma empresa → vai para dashboard
+      // - Se é novo → seta googlePendingData → effectiveTab muda para 'cadastro' imediatamente
     } catch (error) {
       if (error.code === 'auth/popup-closed-by-user') {
         // Usuário fechou o popup, não mostrar erro
       } else if (error.code === 'auth/account-exists-with-different-credential') {
-        // Firebase Auth com "One account per email" — tentar vincular
-        try {
-          const email = error.customData?.email;
-          if (email) {
-            const methods = await fetchSignInMethodsForEmail(auth, email);
-            if (methods.includes('password')) {
-              setGoogleError('Já existe uma conta com este email. Entre com email e senha, depois vincule o Google em Dados Pessoais.');
-            } else {
-              setGoogleError('Já existe uma conta com este email usando outro método de login.');
-            }
-          }
-        } catch (e) {
-          setGoogleError('Erro ao verificar conta existente. Tente login manual.');
-        }
+        setGoogleError('Já existe uma conta com este email. Entre com email e senha.');
       } else {
         setGoogleError('Erro ao entrar com Google. Tente novamente.');
       }
@@ -270,6 +253,7 @@ export default function Login() {
   };
 
   const switchTab = (tab) => {
+    if (isGoogleSignup) return; // Não pode trocar de tab durante cadastro Google
     setActiveTab(tab);
     if (tab === 'cadastro') setStep(1);
   };
@@ -282,12 +266,12 @@ export default function Login() {
         </header>
 
         {/* ============ TAB: ENTRAR ============ */}
-        {activeTab === 'login' && (
+        {effectiveTab === 'login' && (
           <main className="form-wrapper">
             <nav className="form-tabs">
               <button className="tab-item active">Entrar</button>
               <button className="tab-item" onClick={() => switchTab('cadastro')}>Cadastrar</button>
-              <button className="tab-item" onClick={() => setActiveTab('recuperar')}>Recuperar</button>
+              <button className="tab-item" onClick={() => switchTab('recuperar')}>Recuperar</button>
             </nav>
 
             <section className="form-section">
@@ -347,12 +331,12 @@ export default function Login() {
         )}
 
         {/* ============ TAB: CADASTRO ============ */}
-        {activeTab === 'cadastro' && (
+        {effectiveTab === 'cadastro' && (
           <main className="form-wrapper">
             <nav className="form-tabs">
-              <button className="tab-item" onClick={() => { if (!isGoogleSignup) switchTab('login'); }}>Entrar</button>
+              <button className="tab-item" onClick={() => switchTab('login')}>Entrar</button>
               <button className="tab-item active">Cadastrar</button>
-              <button className="tab-item" onClick={() => { if (!isGoogleSignup) setActiveTab('recuperar'); }}>Recuperar</button>
+              <button className="tab-item" onClick={() => switchTab('recuperar')}>Recuperar</button>
             </nav>
 
             <section className="form-section">
@@ -467,11 +451,11 @@ export default function Login() {
         )}
 
         {/* ============ TAB: RECUPERAR ============ */}
-        {activeTab === 'recuperar' && (
+        {effectiveTab === 'recuperar' && (
           <main className="form-wrapper">
             <nav className="form-tabs">
-              <button className="tab-item" onClick={() => switchTab('login')}>Entrar</button>
-              <button className="tab-item" onClick={() => switchTab('cadastro')}>Cadastrar</button>
+              <button className="tab-item" onClick={() => setActiveTab('login')}>Entrar</button>
+              <button className="tab-item" onClick={() => setActiveTab('cadastro')}>Cadastrar</button>
               <button className="tab-item active">Recuperar</button>
             </nav>
 

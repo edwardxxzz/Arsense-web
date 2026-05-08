@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { collectionGroup, query, where, getDocs, doc, setDoc, addDoc, collection } from 'firebase/firestore';
 import { auth, db } from '../firebase';
@@ -22,14 +22,10 @@ export function AuthProvider({ children }) {
       if (firebaseUser) {
         setUser(firebaseUser);
 
-        // Se o cadastro está em andamento, NÃO buscar no Firestore
-        // O handler de cadastro vai chamar finishRegistration() diretamente
+        // Se o cadastro manual está em andamento, NÃO buscar no Firestore
         if (registeringRef.current) {
           return;
         }
-
-        setNeedsCompanySetup(false);
-        setGooglePendingData(null);
 
         try {
           const emailLower = (firebaseUser.email || '').toLowerCase().trim();
@@ -46,6 +42,7 @@ export function AuthProvider({ children }) {
             setUserData({ ...data, docId: userDoc.id });
             setEmpresaId(companyId);
             setNeedsCompanySetup(false);
+            setGooglePendingData(null);
           } else {
             // 2. Não encontrado por UID — buscar por email para criar "irmão" na mesma empresa
             let emailMatch = null;
@@ -71,7 +68,6 @@ export function AuthProvider({ children }) {
               const companyId = emailMatch.doc.ref.parent.parent?.id;
               const existingData = emailMatch.data;
 
-              // Criar novo doc de usuário para este UID na mesma empresa
               const siblingUserName = firebaseUser.displayName || existingData.userName || firebaseUser.email?.split('@')[0] || 'Usuário';
               await setDoc(doc(db, 'empresas', companyId, 'usuarios', firebaseUser.uid), {
                 dataLogin: new Date().toISOString(),
@@ -97,9 +93,10 @@ export function AuthProvider({ children }) {
               });
               setEmpresaId(companyId);
               setNeedsCompanySetup(false);
+              setGooglePendingData(null);
             } else {
               // 3. Nem por UID nem por email — usuário novo do Google
-              // Sinalizar que precisa completar cadastro na tela de Cadastrar
+              // Precisa completar cadastro na tela de Cadastrar
               setNeedsCompanySetup(true);
               setGooglePendingData({
                 uid: firebaseUser.uid,
@@ -107,6 +104,8 @@ export function AuthProvider({ children }) {
                 email: firebaseUser.email || '',
                 photoURL: firebaseUser.photoURL || '',
               });
+              setEmpresaId(null);
+              setUserData(null);
             }
           }
         } catch (error) {
@@ -127,24 +126,24 @@ export function AuthProvider({ children }) {
   }, []);
 
   // Chamado ANTES de createUserWithEmailAndPassword para evitar condição de corrida
-  const startRegistration = () => {
+  const startRegistration = useCallback(() => {
     registeringRef.current = true;
-  };
+  }, []);
 
   // Chamado DEPOIS de criar os docs no Firestore para definir o estado corretamente
-  const finishRegistration = (newEmpresaId, newUserData) => {
+  const finishRegistration = useCallback((newEmpresaId, newUserData) => {
     setEmpresaId(newEmpresaId);
     setUserData(newUserData);
     setNeedsCompanySetup(false);
     setGooglePendingData(null);
     registeringRef.current = false;
     setLoading(false);
-  };
+  }, []);
 
-  const clearGooglePending = () => {
+  const clearGooglePending = useCallback(() => {
     setGooglePendingData(null);
     setNeedsCompanySetup(false);
-  };
+  }, []);
 
   const completeCompanySetup = async (companyName, password, userName) => {
     if (!user) return;
@@ -163,7 +162,6 @@ export function AuthProvider({ children }) {
         const credential = EmailAuthProvider.credentialWithEmail(emailUsuario, password);
         await linkWithCredential(user, credential);
       } catch (linkError) {
-        // Se o email já está em uso por outra conta, apenas logar — não bloquear o cadastro
         if (linkError.code === 'auth/email-already-in-use' || linkError.code === 'auth/credential-already-in-use') {
           console.warn('Credencial já vinculada a outra conta. Prosseguindo com o cadastro.');
         } else {
