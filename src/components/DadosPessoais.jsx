@@ -69,16 +69,20 @@ export default function DadosPessoais({ onClose }) {
     setSenhaError('');
     setSenhaSuccess('');
 
+    if (!senhaAtual) {
+      setSenhaError('Insira sua senha atual.');
+      return;
+    }
     if (novaSenha.length < 8) {
       setSenhaError('A nova senha deve ter no mínimo 8 caracteres.');
       return;
     }
-    if (novaSenha !== confirmarSenha) {
-      setSenhaError('As senhas não coincidem.');
+    if (novaSenha === senhaAtual) {
+      setSenhaError('A nova senha deve ser diferente da senha atual.');
       return;
     }
-    if (!senhaAtual) {
-      setSenhaError('Insira sua senha atual.');
+    if (novaSenha !== confirmarSenha) {
+      setSenhaError('As senhas não coincidem.');
       return;
     }
 

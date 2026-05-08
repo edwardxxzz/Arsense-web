@@ -375,7 +375,7 @@ export default function Perifericos() {
                 </div>
                 <div className="modal-form-group">
                   <label>IP</label>
-                  <input className="input-field" placeholder="Ex: 192.168.1.1" value={ip} onChange={e => setIp(e.target.value)} />
+                  <input className="input-field" placeholder="Ex: 192.168.1.1" value={ip} onChange={e => { const val = e.target.value; if (val === '' || /^[\d.]*$/.test(val)) setIp(val); }} inputMode="numeric" />
                 </div>
               </div>
             )}
@@ -451,7 +451,7 @@ export default function Perifericos() {
                 </div>
                 <div className="modal-form-group">
                   <label>IP</label>
-                  <input className="input-field" placeholder="Ex: 192.168.1.1" value={editIp} onChange={e => setEditIp(e.target.value)} />
+                  <input className="input-field" placeholder="Ex: 192.168.1.1" value={editIp} onChange={e => { const val = e.target.value; if (val === '' || /^[\d.]*$/.test(val)) setEditIp(val); }} inputMode="numeric" />
                 </div>
               </div>
             )}

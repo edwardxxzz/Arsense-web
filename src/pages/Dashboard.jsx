@@ -327,17 +327,17 @@ export default function Dashboard() {
             <div className="modal-form-row">
               <div className="modal-form-group">
                 <label>Área (m²)</label>
-                <input className="input-field" placeholder="Ex: 50" value={newEnvArea} onChange={e => setNewEnvArea(e.target.value)} />
+                <input className="input-field" type="text" inputMode="numeric" placeholder="Ex: 50" value={newEnvArea} onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setNewEnvArea(val); }} />
               </div>
               <div className="modal-form-group">
                 <label>Capacidade</label>
-                <input className="input-field" placeholder="Ex: 10" value={newEnvCapacidade} onChange={e => setNewEnvCapacidade(e.target.value)} />
+                <input className="input-field" type="text" inputMode="numeric" placeholder="Ex: 10" value={newEnvCapacidade} onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setNewEnvCapacidade(val); }} />
               </div>
             </div>
 
             <div className="modal-form-group">
               <label>Andar/Localização</label>
-              <input className="input-field" placeholder="Ex: 2º Andar" value={newEnvAndar} onChange={e => setNewEnvAndar(e.target.value)} />
+              <input className="input-field" type="text" inputMode="numeric" placeholder="Ex: 2" value={newEnvAndar} onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setNewEnvAndar(val); }} />
             </div>
 
             <div className="modal-actions">
@@ -368,17 +368,17 @@ export default function Dashboard() {
             <div className="modal-form-row">
               <div className="modal-form-group">
                 <label>Área (m²)</label>
-                <input className="input-field" placeholder="Ex: 50" value={editEnvArea} onChange={e => setEditEnvArea(e.target.value)} />
+                <input className="input-field" type="text" inputMode="numeric" placeholder="Ex: 50" value={editEnvArea} onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEditEnvArea(val); }} />
               </div>
               <div className="modal-form-group">
                 <label>Capacidade</label>
-                <input className="input-field" placeholder="Ex: 10" value={editEnvCapacidade} onChange={e => setEditEnvCapacidade(e.target.value)} />
+                <input className="input-field" type="text" inputMode="numeric" placeholder="Ex: 10" value={editEnvCapacidade} onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEditEnvCapacidade(val); }} />
               </div>
             </div>
 
             <div className="modal-form-group">
               <label>Andar/Localização</label>
-              <input className="input-field" placeholder="Ex: 2º Andar" value={editEnvAndar} onChange={e => setEditEnvAndar(e.target.value)} />
+              <input className="input-field" type="text" inputMode="numeric" placeholder="Ex: 2" value={editEnvAndar} onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEditEnvAndar(val); }} />
             </div>
 
             <div className="modal-actions">

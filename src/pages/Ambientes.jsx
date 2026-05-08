@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Calendar, Search, ChevronDown } from 'lucide-react';
+import { Plus, Calendar, Search, ChevronDown, Building2 } from 'lucide-react';
 
 export default function Ambientes() {
   const { empresaId } = useAuth();
@@ -184,6 +184,14 @@ export default function Ambientes() {
             <div key={i} style={{ height: 160, borderRadius: 12 }} className="skeleton" />
           ))}
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="card">
+          <div className="empty-state">
+            <div className="empty-state-icon"><Building2 size={32} /></div>
+            <h3>Nenhum ambiente</h3>
+            <p>Cadastre um ambiente para começar a monitorar</p>
+          </div>
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
           {filtered.map(env => (
@@ -256,16 +264,16 @@ export default function Ambientes() {
             <div className="modal-form-row">
               <div className="modal-form-group">
                 <label>Área (m²)</label>
-                <input className="input-field" placeholder="Ex: 50" value={envArea} onChange={e => setEnvArea(e.target.value)} />
+                <input className="input-field" placeholder="Ex: 50" value={envArea} inputMode="numeric" onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEnvArea(val); }} />
               </div>
               <div className="modal-form-group">
                 <label>Capacidade</label>
-                <input className="input-field" placeholder="Ex: 10" value={envCapacidade} onChange={e => setEnvCapacidade(e.target.value)} />
+                <input className="input-field" placeholder="Ex: 10" value={envCapacidade} inputMode="numeric" onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEnvCapacidade(val); }} />
               </div>
             </div>
             <div className="modal-form-group">
               <label>Andar/Localização</label>
-              <input className="input-field" placeholder="Ex: 2º Andar" value={envAndar} onChange={e => setEnvAndar(e.target.value)} />
+              <input className="input-field" placeholder="Ex: 2" value={envAndar} inputMode="numeric" onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEnvAndar(val); }} />
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowNewEnvModal(false)}>Cancelar</button>
@@ -292,16 +300,16 @@ export default function Ambientes() {
             <div className="modal-form-row">
               <div className="modal-form-group">
                 <label>Área (m²)</label>
-                <input className="input-field" placeholder="Ex: 50" value={editEnvArea} onChange={e => setEditEnvArea(e.target.value)} />
+                <input className="input-field" placeholder="Ex: 50" value={editEnvArea} inputMode="numeric" onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEditEnvArea(val); }} />
               </div>
               <div className="modal-form-group">
                 <label>Capacidade</label>
-                <input className="input-field" placeholder="Ex: 10" value={editEnvCapacidade} onChange={e => setEditEnvCapacidade(e.target.value)} />
+                <input className="input-field" placeholder="Ex: 10" value={editEnvCapacidade} inputMode="numeric" onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEditEnvCapacidade(val); }} />
               </div>
             </div>
             <div className="modal-form-group">
               <label>Andar/Localização</label>
-              <input className="input-field" placeholder="Ex: 2º Andar" value={editEnvAndar} onChange={e => setEditEnvAndar(e.target.value)} />
+              <input className="input-field" placeholder="Ex: 2" value={editEnvAndar} inputMode="numeric" onChange={e => { const val = e.target.value; if (val === '' || /^\d+$/.test(val)) setEditEnvAndar(val); }} />
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowEditEnvModal(false)}>Cancelar</button>

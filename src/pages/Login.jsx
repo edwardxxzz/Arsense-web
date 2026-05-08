@@ -1,15 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
-import { doc, setDoc, collection, addDoc, collectionGroup, query, where, getDocs } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
 import { FaEye, FaEyeSlash } from 'react-icons/fa';
 import logoImg from '../assets/logo.png';
 import googleImg from '../assets/google.png';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { googlePendingData, clearGooglePending, completeCompanySetup, cancelCompanySetup, user } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
+
+  // Se tem googlePendingData, forçar tab cadastro
+  useEffect(() => {
+    if (googlePendingData) {
+      setActiveTab('cadastro');
+    }
+  }, [googlePendingData]);
 
   // Login
   const [loginEmail, setLoginEmail] = useState('');
@@ -40,6 +49,18 @@ export default function Login() {
   // Google Sign-In
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState('');
+
+  // Pré-preencher campos quando googlePendingData muda
+  useEffect(() => {
+    if (googlePendingData) {
+      setRegName(googlePendingData.displayName || '');
+      setRegEmail(googlePendingData.email || '');
+      setStep(1);
+    }
+  }, [googlePendingData]);
+
+  // Se é cadastro via Google
+  const isGoogleSignup = !!googlePendingData;
 
   // Validações login
   const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail);
@@ -93,62 +114,68 @@ export default function Login() {
 
     setRegLoading(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
-      const uid = userCredential.user.uid;
-      const nomeEmpresa = regCompany;
+      if (isGoogleSignup) {
+        // Cadastro via Google — usar completeCompanySetup do AuthContext
+        await completeCompanySetup(regCompany, regPassword, regName);
+      } else {
+        // Cadastro normal
+        const userCredential = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+        const uid = userCredential.user.uid;
+        const nomeEmpresa = regCompany;
 
-      // Criar empresa
-      await setDoc(doc(db, 'empresas', nomeEmpresa), {
-        nome: nomeEmpresa,
-        criadoEm: new Date().toISOString(),
-      }, { merge: true });
+        // Criar empresa
+        await setDoc(doc(db, 'empresas', nomeEmpresa), {
+          nome: nomeEmpresa,
+          criadoEm: new Date().toISOString(),
+        }, { merge: true });
 
-      // Criar usuário
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'usuarios', uid), {
-        dataLogin: new Date().toISOString(),
-        email: regEmail,
-        emailLowercase: regEmail.toLowerCase().trim(),
-        senha: 'Gerenciada pelo Firebase Auth',
-        userId: uid,
-        userName: regName,
-      });
+        // Criar usuário
+        await setDoc(doc(db, 'empresas', nomeEmpresa, 'usuarios', uid), {
+          dataLogin: new Date().toISOString(),
+          email: regEmail,
+          emailLowercase: regEmail.toLowerCase().trim(),
+          senha: 'Gerenciada pelo Firebase Auth',
+          userId: uid,
+          userName: regName,
+        });
 
-      // Criar central
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'centrais', 'macRPI'), {
-        ip_local: '',
-        nome: '',
-        online: false,
-      });
+        // Criar central
+        await setDoc(doc(db, 'empresas', nomeEmpresa, 'centrais', 'macRPI'), {
+          ip_local: '',
+          nome: '',
+          online: false,
+        });
 
-      // Criar ambiente padrão
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1'), {
-        config: { andar: '', area: '', nome: '', tipo: '' },
-        dados: { central_id: 'central 1', criadoEM: new Date().toISOString(), nome: 'ambiente 1', receptor_id: 'receptor1' },
-        sensores: { iluminação: 0, presenca: false, temperatura: 0, umidade: 0 },
-      }, { merge: true });
+        // Criar ambiente padrão
+        await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1'), {
+          config: { andar: '', area: '', nome: '', tipo: '' },
+          dados: { central_id: 'central 1', criadoEM: new Date().toISOString(), nome: 'ambiente 1', receptor_id: 'receptor1' },
+          sensores: { iluminação: 0, presenca: false, temperatura: 0, umidade: 0 },
+        }, { merge: true });
 
-      // Histórico do ambiente
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'historico', 'registro_inicial'), {
-        co2: 0, qualidade_ar: 100, temperatura: 0, umidade: 0,
-        timestamp: new Date().toISOString(), luminosidade: 0, presenca: 0,
-      });
+        // Histórico do ambiente
+        await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'historico', 'registro_inicial'), {
+          co2: 0, qualidade_ar: 100, temperatura: 0, umidade: 0,
+          timestamp: new Date().toISOString(), luminosidade: 0, presenca: 0,
+        });
 
-      // Periféricos
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'perifericos', 'ar_condicionado'), {
-        geral: { ligado: false, marca: '', modelo: '', temperatura: 24 },
-      });
+        // Periféricos
+        await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'perifericos', 'ar_condicionado'), {
+          geral: { ligado: false, marca: '', modelo: '', temperatura: 24 },
+        });
 
-      // Agendamentos
-      await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'agendamentos', 'registro_inicial'), {
-        timestamp: new Date().toISOString(), status: 'inicializado', observacao: 'Registro inicial',
-      });
+        // Agendamentos
+        await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1', 'agendamentos', 'registro_inicial'), {
+          timestamp: new Date().toISOString(), status: 'inicializado', observacao: 'Registro inicial',
+        });
 
-      // Histórico geral
-      await addDoc(collection(db, 'empresas', nomeEmpresa, 'historico_geral'), {
-        co2_medio: 0, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        indice_conforto: 0, qual_do_ar: 0, temperatura_media: 0,
-        timestamp: Date.now(), luminosidade: 0, presenca: 0,
-      });
+        // Histórico geral
+        await addDoc(collection(db, 'empresas', nomeEmpresa, 'historico_geral'), {
+          co2_medio: 0, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          indice_conforto: 0, qual_do_ar: 0, temperatura_media: 0,
+          timestamp: Date.now(), luminosidade: 0, presenca: 0,
+        });
+      }
 
       navigate('/home');
     } catch (error) {
@@ -166,19 +193,28 @@ export default function Login() {
       await signInWithPopup(auth, provider);
       // Após o sucesso, o onAuthStateChanged no AuthContext resolve tudo:
       // - Se já tem empresa → vai para dashboard
-      // - Se mesmo email já existe → vincula automaticamente
-      // - Se é novo → mostra CompleteRegistration
+      // - Se mesmo email já existe → vincula automaticamente (atualiza userId)
+      // - Se é novo → seta googlePendingData → Login vai para tab Cadastrar
     } catch (error) {
       if (error.code === 'auth/popup-closed-by-user') {
         // Usuário fechou o popup, não mostrar erro
-      } else if (error.code === 'auth/account-exists-with-different-credential') {
-        setGoogleError('Já existe uma conta com esse email. Faça login com email e senha, depois vincule o Google nas configurações.');
       } else {
         setGoogleError('Erro ao entrar com Google. Tente novamente.');
       }
     } finally {
       setGoogleLoading(false);
     }
+  };
+
+  const handleGoogleCancel = () => {
+    cancelCompanySetup();
+    setRegName('');
+    setRegEmail('');
+    setRegCompany('');
+    setRegPassword('');
+    setRegConfirmPassword('');
+    setRegTerms(false);
+    setStep(1);
   };
 
   const handleRecovery = async (e) => {
@@ -189,6 +225,11 @@ export default function Login() {
     } catch (error) {
       alert('Email não encontrado ou inválido');
     }
+  };
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    if (tab === 'cadastro') setStep(1);
   };
 
   return (
@@ -203,7 +244,7 @@ export default function Login() {
           <main className="form-wrapper">
             <nav className="form-tabs">
               <button className="tab-item active">Entrar</button>
-              <button className="tab-item" onClick={() => { setActiveTab('cadastro'); setStep(1); }}>Cadastrar</button>
+              <button className="tab-item" onClick={() => switchTab('cadastro')}>Cadastrar</button>
               <button className="tab-item" onClick={() => setActiveTab('recuperar')}>Recuperar</button>
             </nav>
 
@@ -267,14 +308,24 @@ export default function Login() {
         {activeTab === 'cadastro' && (
           <main className="form-wrapper">
             <nav className="form-tabs">
-              <button className="tab-item" onClick={() => setActiveTab('login')}>Entrar</button>
+              <button className="tab-item" onClick={() => { if (!isGoogleSignup) switchTab('login'); }}>Entrar</button>
               <button className="tab-item active">Cadastrar</button>
-              <button className="tab-item" onClick={() => setActiveTab('recuperar')}>Recuperar</button>
+              <button className="tab-item" onClick={() => { if (!isGoogleSignup) setActiveTab('recuperar'); }}>Recuperar</button>
             </nav>
 
             <section className="form-section">
               <h1 className="form-title">Criar sua conta</h1>
-              <p className="form-subtitle">Preencha seus dados para começar</p>
+              <p className="form-subtitle">
+                {isGoogleSignup
+                  ? 'Complete seu cadastro com os dados da empresa'
+                  : 'Preencha seus dados para começar'}
+              </p>
+
+              {isGoogleSignup && (
+                <div style={{ textAlign: 'center', marginBottom: 16, padding: '10px', backgroundColor: '#F0F4FF', borderRadius: 8, fontSize: 13, color: '#374151' }}>
+                  Conta Google autenticada: <strong>{googlePendingData?.email}</strong>
+                </div>
+              )}
 
               <div className={`progress-indicator ${step === 2 ? 'step-2' : ''}`}>
                 <div className={`circle ${step >= 1 ? 'active' : ''}`}>1</div>
@@ -296,7 +347,9 @@ export default function Login() {
                     <label htmlFor="corporateEmail">Email Corporativo</label>
                     <div className={`input-container ${!emailCorpValido && regEmail.length > 0 ? 'error-border' : ''}`}>
                       <input type="email" id="corporateEmail" placeholder="seu@empresa.com" value={regEmail}
-                        onChange={e => setRegEmail(e.target.value)} />
+                        onChange={e => setRegEmail(e.target.value)}
+                        disabled={isGoogleSignup}
+                        style={isGoogleSignup ? { opacity: 0.6, cursor: 'not-allowed' } : {}} />
                     </div>
                   </div>
 
@@ -349,12 +402,23 @@ export default function Login() {
                   </div>
 
                   <div className="btn-group">
-                    <button type="button" className="btn btn-secondary" onClick={() => setStep(1)}>Voltar</button>
+                    <button type="button" className="btn btn-secondary"
+                      onClick={() => setStep(1)}>
+                      Voltar
+                    </button>
                     <button type="submit" className="btn btn-primary" disabled={!podeCriarConta}>
                       {regLoading ? 'Criando...' : 'Criar conta →'}
                     </button>
                   </div>
                 </form>
+              )}
+
+              {isGoogleSignup && (
+                <div style={{ textAlign: 'center', marginTop: 16 }}>
+                  <button type="button" onClick={handleGoogleCancel} style={{ background: 'none', border: 'none', color: '#6B7280', fontSize: 13, cursor: 'pointer', textDecoration: 'underline' }}>
+                    Cancelar e voltar ao login
+                  </button>
+                </div>
               )}
             </section>
           </main>
@@ -364,8 +428,8 @@ export default function Login() {
         {activeTab === 'recuperar' && (
           <main className="form-wrapper">
             <nav className="form-tabs">
-              <button className="tab-item" onClick={() => setActiveTab('login')}>Entrar</button>
-              <button className="tab-item" onClick={() => { setActiveTab('cadastro'); setStep(1); }}>Cadastrar</button>
+              <button className="tab-item" onClick={() => switchTab('login')}>Entrar</button>
+              <button className="tab-item" onClick={() => switchTab('cadastro')}>Cadastrar</button>
               <button className="tab-item active">Recuperar</button>
             </nav>
 
