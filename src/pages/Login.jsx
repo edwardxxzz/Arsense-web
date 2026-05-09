@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  sendPasswordResetEmail, 
+  signInWithPopup, 
+  GoogleAuthProvider,
+  linkWithCredential
+} from 'firebase/auth';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -13,21 +20,34 @@ export default function Login() {
   const {
     googlePendingData, clearGooglePending, completeCompanySetup,
     cancelCompanySetup, user, startRegistration, finishRegistration,
-    empresaId, loading: authLoading
+    empresaId, loading: authLoading, authResolved
   } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
 
   // Se tem googlePendingData, FORÇAR tab cadastro (não depende de useEffect)
   const effectiveTab = googlePendingData ? 'cadastro' : activeTab;
 
-  // Se o usuário está autenticado e tem empresa, redirecionar para dashboard
+  // Redirecionar apenas quando auth terminou de resolver e tem empresa
   useEffect(() => {
-    if (user && empresaId && !googlePendingData) {
+    if (!authLoading && authResolved && user && empresaId && !googlePendingData) {
       navigate('/home');
     }
-  }, [user, empresaId, googlePendingData, navigate]);
+  }, [user, empresaId, googlePendingData, navigate, authLoading, authResolved]);
 
-  // Pré-preencher campos quando googlePendingData muda
+  // Se o usuário deslogou mas googlePendingData ficou preso, limpar
+  useEffect(() => {
+    if (!user && googlePendingData) {
+      clearGooglePending();
+      setRegName('');
+      setRegEmail('');
+      setRegCompany('');
+      setRegPassword('');
+      setRegConfirmPassword('');
+      setRegTerms(false);
+      setStep(1);
+    }
+  }, [user, googlePendingData, clearGooglePending]);
+
   const isGoogleSignup = !!googlePendingData;
 
   // Login
@@ -59,6 +79,14 @@ export default function Login() {
   // Google Sign-In
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleError, setGoogleError] = useState('');
+
+  // Fluxo de vinculação Google ↔ Password (Bug 2)
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkPassword, setLinkPassword] = useState('');
+  const [linkCredential, setLinkCredential] = useState(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkError, setLinkError] = useState('');
 
   // Pré-preencher quando googlePendingData muda
   useEffect(() => {
@@ -103,7 +131,6 @@ export default function Login() {
     try {
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       // onAuthStateChanged no AuthContext vai setar empresaId automaticamente
-      // O useEffect acima vai redirecionar para /home
     } catch (error) {
       setErroLogin(true);
     } finally {
@@ -213,7 +240,7 @@ export default function Login() {
     setGoogleError('');
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
+      await signInWithPopup(auth, provider);
       // Após o sucesso, o onAuthStateChanged no AuthContext resolve tudo:
       // - Se já tem empresa → vai para dashboard (via useEffect de redirect)
       // - Se mesmo email já existe → cria "irmão" na mesma empresa → vai para dashboard
@@ -222,12 +249,52 @@ export default function Login() {
       if (error.code === 'auth/popup-closed-by-user') {
         // Usuário fechou o popup, não mostrar erro
       } else if (error.code === 'auth/account-exists-with-different-credential') {
-        setGoogleError('Já existe uma conta com este email. Entre com email e senha.');
+        // BUG 2: Capturar credencial Google e iniciar fluxo de vinculação
+        const email = error.customData?.email || error.email;
+        const credential = GoogleAuthProvider.credentialFromError(error);
+        if (email && credential) {
+          setLinkEmail(email);
+          setLinkCredential(credential);
+          setLinkModalOpen(true);
+        } else {
+          setGoogleError('Já existe uma conta com este email. Entre com email e senha para vincular.');
+        }
       } else {
         setGoogleError('Erro ao entrar com Google. Tente novamente.');
       }
     } finally {
       setGoogleLoading(false);
+    }
+  };
+
+  // Fluxo de vinculação: usuário digitou senha da conta existente
+  const handleLinkAccount = async (e) => {
+    e.preventDefault();
+    if (!linkPassword || !linkCredential || !linkEmail) return;
+
+    setLinkLoading(true);
+    setLinkError('');
+    try {
+      // 1) Autenticar com a conta password existente
+      const userCredential = await signInWithEmailAndPassword(auth, linkEmail, linkPassword);
+      // 2) Vincular a credencial Google
+      await linkWithCredential(userCredential.user, linkCredential);
+      // 3) Fechar modal — onAuthStateChanged vai detectar o usuário unificado
+      setLinkModalOpen(false);
+      setLinkPassword('');
+      setLinkCredential(null);
+      setLinkEmail('');
+    } catch (err) {
+      if (err.code === 'auth/wrong-password') {
+        setLinkError('Senha incorreta.');
+      } else if (err.code === 'auth/provider-already-linked') {
+        setLinkError('Conta Google já vinculada.');
+        setLinkModalOpen(false);
+      } else {
+        setLinkError('Erro ao vincular: ' + err.message);
+      }
+    } finally {
+      setLinkLoading(false);
     }
   };
 
@@ -255,8 +322,23 @@ export default function Login() {
   const switchTab = (tab) => {
     if (isGoogleSignup) return; // Não pode trocar de tab durante cadastro Google
     setActiveTab(tab);
+    setErroLogin(false);
+    setGoogleError('');
+    setRecoverySuccess(false);
     if (tab === 'cadastro') setStep(1);
   };
+
+  // Loading global enquanto auth resolve
+  if (authLoading && !authResolved) {
+    return (
+      <div className="bg-gradient" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
+        <div style={{ textAlign: 'center', color: '#fff' }}>
+          <div className="spinner" style={{ marginBottom: 16 }} />
+          <p>Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gradient">
@@ -264,6 +346,57 @@ export default function Login() {
         <header className="header">
           <img src={logoImg} alt="Logo @rsense" className="logo-img" />
         </header>
+
+        {/* ============ MODAL DE VINCULAÇÃO GOOGLE (Bug 2) ============ */}
+        {linkModalOpen && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}>
+            <div style={{
+              background: '#fff', borderRadius: 12, padding: '28px 24px',
+              width: '90%', maxWidth: 380, boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            }}>
+              <h3 style={{ marginBottom: 8, fontSize: 18, color: '#111827' }}>
+                Vincular conta Google
+              </h3>
+              <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 20 }}>
+                Já existe uma conta com <strong>{linkEmail}</strong>. Digite sua senha atual para vincular o login Google e manter um único acesso.
+              </p>
+              <form onSubmit={handleLinkAccount}>
+                <div className="input-group" style={{ marginBottom: 12 }}>
+                  <label>Senha atual</label>
+                  <div className="input-container password-input-container">
+                    <input
+                      type="password"
+                      placeholder="Sua senha atual"
+                      value={linkPassword}
+                      onChange={e => setLinkPassword(e.target.value)}
+                      required
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                {linkError && (
+                  <p className="error-text" style={{ marginBottom: 12, fontSize: 12 }}>{linkError}</p>
+                )}
+                <div className="btn-group">
+                  <button type="button" className="btn btn-secondary" onClick={() => {
+                    setLinkModalOpen(false);
+                    setLinkPassword('');
+                    setLinkError('');
+                  }}>
+                    Cancelar
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={!linkPassword || linkLoading}>
+                    {linkLoading ? 'Vinculando...' : 'Vincular conta →'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         {/* ============ TAB: ENTRAR ============ */}
         {effectiveTab === 'login' && (
