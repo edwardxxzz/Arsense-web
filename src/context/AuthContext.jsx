@@ -1,7 +1,6 @@
-
-auth_context_code = '''import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
-import { onAuthStateChanged, signOut, EmailAuthProvider, linkWithCredential } from 'firebase/auth';
-import { collectionGroup, query, where, getDocs, doc, setDoc, addDoc, collection, getDoc } from 'firebase/firestore';
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { collectionGroup, query, where, getDocs, doc, setDoc, addDoc, collection } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 const AuthContext = createContext(null);
@@ -11,7 +10,6 @@ export function AuthProvider({ children }) {
   const [userData, setUserData] = useState(null);
   const [empresaId, setEmpresaId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [authResolved, setAuthResolved] = useState(false); // NOVO: indica que a checagem inicial terminou
   const [needsCompanySetup, setNeedsCompanySetup] = useState(false);
   const [googlePendingData, setGooglePendingData] = useState(null);
 
@@ -19,79 +17,100 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setAuthResolved(false); // inicia resolução
-
       if (firebaseUser) {
         setUser(firebaseUser);
 
-        // Se estamos no meio de um cadastro manual, não interferir.
-        // Mas garantir que loading seja desativado ao final.
         if (registeringRef.current) {
-          setLoading(false);
-          setAuthResolved(true);
           return;
         }
 
         try {
           const emailLower = (firebaseUser.email || '').toLowerCase().trim();
 
-          // 1) Buscar pelo UID exato no Firestore
-          const uidQ = query(collectionGroup(db, 'usuarios'), where('userId', '==', firebaseUser.uid));
+          // 1. Buscar por UID
+          const uidQ = query(
+            collectionGroup(db, 'usuarios'),
+            where('userId', '==', firebaseUser.uid)
+          );
           const uidSnapshot = await getDocs(uidQ);
 
           if (!uidSnapshot.empty) {
+            // Usuário encontrado por UID — fluxo normal
             const userDoc = uidSnapshot.docs[0];
             const data = userDoc.data();
             const companyId = userDoc.ref.parent.parent?.id;
-
-            // Atualiza o provider no Firestore para refletir todos os métodos vinculados
-            const currentProviders = firebaseUser.providerData?.map(p => p.providerId) || [];
-            const providerString = currentProviders.join(',') || 'google.com';
-            if (data.authProvider !== providerString) {
-              await setDoc(userDoc.ref, { authProvider: providerString }, { merge: true });
-              data.authProvider = providerString;
-            }
-
             setUserData({ ...data, docId: userDoc.id });
             setEmpresaId(companyId);
             setNeedsCompanySetup(false);
             setGooglePendingData(null);
           } else {
-            // 2) Não achou pelo UID → buscar pelo email
+            // 2. Não encontrado por UID — buscar por email
             let emailMatch = null;
 
-            const emailQ = query(collectionGroup(db, 'usuarios'), where('emailLowercase', '==', emailLower));
-            const emailSnapshot = await getDocs(emailQ);
-            if (!emailSnapshot.empty) {
-              emailMatch = { doc: emailSnapshot.docs[0], data: emailSnapshot.docs[0].data() };
+            // Tenta por emailLowercase (requer índice no Firestore)
+            try {
+              const emailQ = query(
+                collectionGroup(db, 'usuarios'),
+                where('emailLowercase', '==', emailLower)
+              );
+              const emailSnapshot = await getDocs(emailQ);
+              if (!emailSnapshot.empty) {
+                emailMatch = {
+                  doc: emailSnapshot.docs[0],
+                  data: emailSnapshot.docs[0].data(),
+                };
+              }
+            } catch (indexErr) {
+              // Índice ainda não criado no Firestore — tenta fallback
+              console.warn('Índice emailLowercase ausente, tentando fallback:', indexErr.message);
             }
 
+            // Fallback: busca por campo email direto
             if (!emailMatch) {
-              const emailDirectQ = query(collectionGroup(db, 'usuarios'), where('email', '==', firebaseUser.email));
-              const emailDirectSnapshot = await getDocs(emailDirectQ);
-              if (!emailDirectSnapshot.empty) {
-                emailMatch = { doc: emailDirectSnapshot.docs[0], data: emailDirectSnapshot.docs[0].data() };
+              try {
+                const emailDirectQ = query(
+                  collectionGroup(db, 'usuarios'),
+                  where('email', '==', firebaseUser.email)
+                );
+                const emailDirectSnapshot = await getDocs(emailDirectQ);
+                if (!emailDirectSnapshot.empty) {
+                  emailMatch = {
+                    doc: emailDirectSnapshot.docs[0],
+                    data: emailDirectSnapshot.docs[0].data(),
+                  };
+                }
+              } catch (indexErr2) {
+                console.warn('Fallback de email também falhou:', indexErr2.message);
               }
             }
 
             if (emailMatch) {
+              // Email já existe — criar doc "irmão" na mesma empresa
               const companyId = emailMatch.doc.ref.parent.parent?.id;
               const existingData = emailMatch.data;
+              const siblingUserName =
+                firebaseUser.displayName ||
+                existingData.userName ||
+                firebaseUser.email?.split('@')[0] ||
+                'Usuário';
 
-              // Se o Firebase já unificou os providers (mesmo UID), não criar sibling.
-              // Isso acontece quando a conta já tinha password e o Google foi linkado.
-              const siblingUserName = firebaseUser.displayName || existingData.userName || firebaseUser.email?.split('@')[0] || 'Usuário';
-              await setDoc(doc(db, 'empresas', companyId, 'usuarios', firebaseUser.uid), {
-                dataLogin: new Date().toISOString(),
-                email: firebaseUser.email,
-                emailLowercase: emailLower,
-                userId: firebaseUser.uid,
-                userName: siblingUserName,
-                photoURL: firebaseUser.photoURL || '',
-                authProvider: firebaseUser.providerData?.map(p => p.providerId).join(',') || 'google.com',
-                siblingOf: existingData.userId,
-                linkedAt: new Date().toISOString(),
-              });
+              // Salva todos os providers reais para não bloquear login manual
+              const providers = firebaseUser.providerData?.map(p => p.providerId) || [];
+
+              await setDoc(
+                doc(db, 'empresas', companyId, 'usuarios', firebaseUser.uid),
+                {
+                  dataLogin: new Date().toISOString(),
+                  email: firebaseUser.email,
+                  emailLowercase: emailLower,
+                  userId: firebaseUser.uid,
+                  userName: siblingUserName,
+                  photoURL: firebaseUser.photoURL || '',
+                  authProvider: providers.join(','),
+                  siblingOf: existingData.userId,
+                  linkedAt: new Date().toISOString(),
+                }
+              );
 
               setUserData({
                 dataLogin: new Date().toISOString(),
@@ -100,14 +119,14 @@ export function AuthProvider({ children }) {
                 userId: firebaseUser.uid,
                 userName: siblingUserName,
                 photoURL: firebaseUser.photoURL || '',
-                authProvider: firebaseUser.providerData?.map(p => p.providerId).join(',') || 'google.com',
+                authProvider: providers.join(','),
                 docId: firebaseUser.uid,
               });
               setEmpresaId(companyId);
               setNeedsCompanySetup(false);
               setGooglePendingData(null);
             } else {
-              // 3) Usuário completamente novo → precisa cadastrar empresa
+              // 3. Usuário novo do Google — precisa completar cadastro
               setNeedsCompanySetup(true);
               setGooglePendingData({
                 uid: firebaseUser.uid,
@@ -121,7 +140,10 @@ export function AuthProvider({ children }) {
           }
         } catch (error) {
           console.error('Erro ao buscar dados do usuário:', error);
-          setNeedsCompanySetup(true);
+          // Não força needsCompanySetup=true em erros genéricos
+          // para não travar usuários já cadastrados
+          setLoading(false);
+          return;
         }
       } else {
         setUser(null);
@@ -130,9 +152,7 @@ export function AuthProvider({ children }) {
         setNeedsCompanySetup(false);
         setGooglePendingData(null);
       }
-
       setLoading(false);
-      setAuthResolved(true);
     });
 
     return () => unsubscribe();
@@ -149,38 +169,12 @@ export function AuthProvider({ children }) {
     setGooglePendingData(null);
     registeringRef.current = false;
     setLoading(false);
-    setAuthResolved(true);
   }, []);
 
   const clearGooglePending = useCallback(() => {
     setGooglePendingData(null);
     setNeedsCompanySetup(false);
   }, []);
-
-  // NOVA FUNÇÃO: vincula credencial Google a uma conta password existente
-  const linkGoogleToPasswordAccount = useCallback(async (password) => {
-    if (!user || !googlePendingData) return { success: false, error: 'Sem dados pendentes' };
-
-    try {
-      const email = user.email;
-      // Reautentica com email/senha para obter a credencial password
-      const { signInWithEmailAndPassword } = await import('firebase/auth');
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // Cria credencial Google a partir do provider atual
-      const googleProvider = user.providerData.find(p => p.providerId === 'google.com');
-      if (!googleProvider) {
-        return { success: false, error: 'Provedor Google não encontrado' };
-      }
-
-      // Na prática, se chegamos aqui com o mesmo email, o Firebase já pode ter unificado.
-      // Mas se estamos em modo "multiple accounts", precisamos deletar a conta Google
-      // e linkar. Para simplificar, vamos apenas verificar se o UID mudou.
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }, [user, googlePendingData]);
 
   const completeCompanySetup = async (companyName, password, userName) => {
     if (!user) return;
@@ -192,11 +186,11 @@ export function AuthProvider({ children }) {
     const emailLower = emailUsuario.toLowerCase().trim();
     const isGoogleUser = user.providerData?.some(p => p.providerId === 'google.com');
 
-    // Se é usuário Google e forneceu senha, tentar vincular à conta Firebase Auth.
-    // Se o email já existe como password, linkWithCredential vai falhar com
-    // auth/email-already-in-use. Nesse caso, continuamos apenas criando a estrutura Firestore.
+    // Vincular email+senha à conta Google para permitir login manual futuro
     if (isGoogleUser && password) {
       try {
+        const { EmailAuthProvider, linkWithCredential } = await import('firebase/auth');
+        // ✅ CORREÇÃO: credential() — não credentialWithEmail() (método inexistente)
         const credential = EmailAuthProvider.credential(emailUsuario, password);
         await linkWithCredential(user, credential);
       } catch (linkError) {
@@ -205,9 +199,10 @@ export function AuthProvider({ children }) {
           linkError.code === 'auth/credential-already-in-use' ||
           linkError.code === 'auth/provider-already-linked'
         ) {
-          console.warn('Credencial já vinculada ou email em uso. Prosseguindo com o cadastro.');
+          console.warn('Credencial já vinculada. Prosseguindo com o cadastro.');
         } else {
           console.error('Erro ao vincular credenciais:', linkError);
+          // Não interrompe — Firestore será criado mesmo assim
         }
       }
     }
@@ -219,6 +214,7 @@ export function AuthProvider({ children }) {
     }, { merge: true });
 
     // Criar usuário
+    const providers = user.providerData?.map(p => p.providerId) || [];
     await setDoc(doc(db, 'empresas', nomeEmpresa, 'usuarios', uid), {
       dataLogin: new Date().toISOString(),
       email: emailUsuario,
@@ -227,7 +223,7 @@ export function AuthProvider({ children }) {
       userId: uid,
       userName: nomeUsuario,
       photoURL: user.photoURL || '',
-      authProvider: user.providerData?.map(p => p.providerId).join(',') || 'google.com',
+      authProvider: providers.join(','),
     });
 
     // Criar central
@@ -262,7 +258,8 @@ export function AuthProvider({ children }) {
 
     // Histórico geral
     await addDoc(collection(db, 'empresas', nomeEmpresa, 'historico_geral'), {
-      co2_medio: 0, hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      co2_medio: 0,
+      hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       indice_conforto: 0, qual_do_ar: 0, temperatura_media: 0,
       timestamp: Date.now(), luminosidade: 0, presenca: 0,
     });
@@ -276,7 +273,7 @@ export function AuthProvider({ children }) {
       userId: uid,
       userName: nomeUsuario,
       photoURL: user.photoURL || '',
-      authProvider: user.providerData?.map(p => p.providerId).join(',') || 'google.com',
+      authProvider: providers.join(','),
       docId: uid,
     });
     setNeedsCompanySetup(false);
@@ -324,11 +321,10 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, userData, empresaId, loading, authResolved, logout, getUserInitials,
+      user, userData, empresaId, loading, logout, getUserInitials,
       needsCompanySetup, completeCompanySetup, cancelCompanySetup,
       googlePendingData, clearGooglePending,
-      startRegistration, finishRegistration,
-      linkGoogleToPasswordAccount
+      startRegistration, finishRegistration
     }}>
       {children}
     </AuthContext.Provider>
@@ -342,8 +338,3 @@ export function useAuth() {
   }
   return context;
 }
-
-with open('/mnt/agents/output/AuthContext.jsx', 'w', encoding='utf-8') as f:
-    f.write(auth_context_code)
-
-print("AuthContext.jsx salvo com sucesso.")

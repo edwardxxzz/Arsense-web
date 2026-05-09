@@ -13,7 +13,7 @@ import DadosPessoais from './components/DadosPessoais';
 import { useState } from 'react';
 
 function AppLayout() {
-  const { user, empresaId, loading, needsCompanySetup, googlePendingData } = useAuth();
+  const { user, empresaId, loading, googlePendingData } = useAuth();
   const [showProfile, setShowProfile] = useState(false);
 
   if (loading) {
@@ -31,16 +31,16 @@ function AppLayout() {
     );
   }
 
-  // Sem usuário autenticado → Login
-  // Com usuário mas sem empresa (needsCompanySetup) → Login com aba Cadastro (googlePendingData controla isso)
-  // Com usuário e empresa → Dashboard
-  const showLogin = !user || needsCompanySetup || !empresaId;
+  // ✅ FIX: lógica de roteamento simplificada e robusta:
+  // - Sem usuário → Login
+  // - Com usuário mas sem empresa (novo Google ou cadastro incompleto) → Login (mostra aba Cadastro via googlePendingData)
+  // - Com usuário e empresa → Dashboard
+  const isAuthenticated = !!user && !!empresaId && !googlePendingData;
 
-  if (showLogin) {
+  if (!isAuthenticated) {
     return <Login />;
   }
 
-  // Usuário autenticado com empresa → mostrar dashboard
   return (
     <div style={{ minHeight: '100vh' }}>
       <Sidebar />
