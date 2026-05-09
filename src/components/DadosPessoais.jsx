@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, User, Phone, Mail, Building2, MapPin, Lock, Save, Trash2 } from 'lucide-react';
+import { X, User, Phone, Mail, Building2, MapPin, Lock, Save, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { updateDoc, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { reauthenticateWithCredential, EmailAuthProvider, updatePassword, deleteUser } from 'firebase/auth';
@@ -17,6 +17,9 @@ export default function DadosPessoais({ onClose }) {
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
   const [confirmarSenha, setConfirmarSenha] = useState('');
+  const [showSenhaAtual, setShowSenhaAtual] = useState(false);
+  const [showNovaSenha, setShowNovaSenha] = useState(false);
+  const [showConfirmarSenha, setShowConfirmarSenha] = useState(false);
   const [senhaError, setSenhaError] = useState('');
   const [senhaSuccess, setSenhaSuccess] = useState('');
 
@@ -222,7 +225,10 @@ export default function DadosPessoais({ onClose }) {
               <label style={{ fontSize: 14, fontWeight: 500, color: '#374151', marginBottom: 4, display: 'block' }}>Senha Atual</label>
               <div className="input-with-icon">
                 <Lock size={18} />
-                <input className="input-field" type="password" placeholder="Senha atual" value={senhaAtual} onChange={e => setSenhaAtual(e.target.value)} />
+                <input className="input-field has-toggle" type={showSenhaAtual ? 'text' : 'password'} placeholder="Senha atual" value={senhaAtual} onChange={e => setSenhaAtual(e.target.value)} />
+                <button type="button" className="toggle-password" onClick={() => setShowSenhaAtual(v => !v)} tabIndex={-1}>
+                  {showSenhaAtual ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
@@ -230,7 +236,10 @@ export default function DadosPessoais({ onClose }) {
               <label style={{ fontSize: 14, fontWeight: 500, color: '#374151', marginBottom: 4, display: 'block' }}>Nova Senha</label>
               <div className="input-with-icon">
                 <Lock size={18} />
-                <input className="input-field" type="password" placeholder="Mínimo 8 caracteres" value={novaSenha} onChange={e => setNovaSenha(e.target.value)} />
+                <input className="input-field has-toggle" type={showNovaSenha ? 'text' : 'password'} placeholder="Mínimo 8 caracteres" value={novaSenha} onChange={e => setNovaSenha(e.target.value)} />
+                <button type="button" className="toggle-password" onClick={() => setShowNovaSenha(v => !v)} tabIndex={-1}>
+                  {showNovaSenha ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
 
@@ -238,7 +247,10 @@ export default function DadosPessoais({ onClose }) {
               <label style={{ fontSize: 14, fontWeight: 500, color: '#374151', marginBottom: 4, display: 'block' }}>Confirmar Nova Senha</label>
               <div className="input-with-icon">
                 <Lock size={18} />
-                <input className="input-field" type="password" placeholder="Confirmar nova senha" value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} />
+                <input className="input-field has-toggle" type={showConfirmarSenha ? 'text' : 'password'} placeholder="Confirmar nova senha" value={confirmarSenha} onChange={e => setConfirmarSenha(e.target.value)} />
+                <button type="button" className="toggle-password" onClick={() => setShowConfirmarSenha(v => !v)} tabIndex={-1}>
+                  {showConfirmarSenha ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </div>
           </div>
