@@ -25,6 +25,38 @@ const STATUS_ORDER = { pendente: 0, ativo: 1, concluido: 2 };
 const STATUS_COLORS = { pendente: '#F59E0B', ativo: '#2563EB', concluido: '#10B981' };
 const STATUS_LABELS = { pendente: 'Pendente', ativo: 'Ativo', concluido: 'Concluído' };
 
+// Generate next 14 days for date picker
+const generateNext14Days = () => {
+  const days = [];
+  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    days.push({
+      key: `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`,
+      dayName: i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : dayNames[d.getDay()],
+      dayNum: d.getDate(),
+      month: monthNames[d.getMonth()],
+    });
+  }
+  return days;
+};
+const NEXT_14_DAYS = generateNext14Days();
+
+// Generate time slots (06:00 to 23:00, every 30 min)
+const generateTimeSlots = () => {
+  const slots = [];
+  for (let h = 6; h <= 23; h++) {
+    for (const m of ['00', '30']) {
+      if (h === 23 && m === '30') break;
+      slots.push(`${String(h).padStart(2, '0')}:${m}`);
+    }
+  }
+  return slots;
+};
+const TIME_SLOTS = generateTimeSlots();
+
 export default function Ambientes() {
   const { empresaId } = useAuth();
   const navigate = useNavigate();
@@ -879,25 +911,52 @@ export default function Ambientes() {
               </div>
             </div>
 
-            {/* Data + Horário */}
-            <div className="modal-form-row">
-              <div className="modal-form-group">
-                <label>Data <span className="required">*</span></label>
-                <input
-                  className="input-field"
-                  placeholder="DD/MM/AAAA"
-                  value={schedData}
-                  onChange={e => setSchedData(e.target.value)}
-                />
+            {/* Data */}
+            <div className="modal-form-group">
+              <label>Data <span className="required">*</span></label>
+              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 4 }}>
+                {NEXT_14_DAYS.map(day => (
+                  <button
+                    key={day.key}
+                    type="button"
+                    onClick={() => setSchedData(day.key)}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                      minWidth: 64, padding: '8px 6px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                      backgroundColor: schedData === day.key ? '#2563EB' : '#F8FAFC',
+                      color: schedData === day.key ? '#fff' : '#64748B',
+                      transition: 'all 0.15s ease', flexShrink: 0,
+                    }}
+                  >
+                    <span style={{ fontSize: 11, fontWeight: 500 }}>{day.dayName}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, marginTop: 2 }}>{day.dayNum}</span>
+                    <span style={{ fontSize: 10, fontWeight: 400 }}>{day.month}</span>
+                  </button>
+                ))}
               </div>
-              <div className="modal-form-group">
-                <label>Horário <span className="required">*</span></label>
-                <input
-                  className="input-field"
-                  placeholder="HH:MM"
-                  value={schedHorario}
-                  onChange={e => setSchedHorario(e.target.value)}
-                />
+            </div>
+
+            {/* Horário */}
+            <div className="modal-form-group">
+              <label>Horário <span className="required">*</span></label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
+                {TIME_SLOTS.map(slot => (
+                  <button
+                    key={slot}
+                    type="button"
+                    onClick={() => setSchedHorario(slot)}
+                    style={{
+                      padding: '6px 4px', borderRadius: 8, border: '1px solid',
+                      borderColor: schedHorario === slot ? '#2563EB' : '#E2E8F0',
+                      backgroundColor: schedHorario === slot ? '#EFF6FF' : '#fff',
+                      color: schedHorario === slot ? '#2563EB' : '#475569',
+                      fontSize: 13, fontWeight: schedHorario === slot ? 600 : 400,
+                      cursor: 'pointer', transition: 'all 0.15s ease', textAlign: 'center',
+                    }}
+                  >
+                    {slot}
+                  </button>
+                ))}
               </div>
             </div>
 

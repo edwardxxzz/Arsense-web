@@ -482,6 +482,19 @@ body {
   gap: 16px;
 }
 
+/* Date picker scrollbar */
+.modal-form-group > div::-webkit-scrollbar {
+  height: 4px;
+}
+.modal-form-group > div::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+.modal-form-group > div::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
 .modal-actions {
   display: flex;
   gap: 12px;
