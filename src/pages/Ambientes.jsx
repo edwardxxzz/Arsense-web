@@ -44,18 +44,7 @@ const generateNext14Days = () => {
 };
 const NEXT_14_DAYS = generateNext14Days();
 
-// Generate time slots (06:00 to 23:00, every 30 min)
-const generateTimeSlots = () => {
-  const slots = [];
-  for (let h = 6; h <= 23; h++) {
-    for (const m of ['00', '30']) {
-      if (h === 23 && m === '30') break;
-      slots.push(`${String(h).padStart(2, '0')}:${m}`);
-    }
-  }
-  return slots;
-};
-const TIME_SLOTS = generateTimeSlots();
+// Alarm-clock style time picker columns are rendered inline below
 
 export default function Ambientes() {
   const { empresaId } = useAuth();
@@ -100,7 +89,8 @@ export default function Ambientes() {
   const [schedPerifericoId, setSchedPerifericoId] = useState('');
   const [schedAcao, setSchedAcao] = useState('ligar');
   const [schedData, setSchedData] = useState('');
-  const [schedHorario, setSchedHorario] = useState('');
+  const [schedHora, setSchedHora] = useState('');
+  const [schedMinuto, setSchedMinuto] = useState('');
   const [perifericosDoAmbiente, setPerifericosDoAmbiente] = useState([]);
   const [loadingPerifericos, setLoadingPerifericos] = useState(false);
 
@@ -312,7 +302,8 @@ export default function Ambientes() {
   //  AGENDAMENTO CRUD
   // ====================================================================
   const handleCreateSchedule = async () => {
-    if (!schedAmbiente || !schedTitulo || !schedPerifericoId || !schedData || !schedHorario) return;
+    const composedHorario = schedHora && schedMinuto ? `${schedHora}:${schedMinuto}` : '';
+    if (!schedAmbiente || !schedTitulo || !schedPerifericoId || !schedData || !composedHorario) return;
 
     const selectedPerif = perifericosDoAmbiente.find(p => p.nomeId === schedPerifericoId);
 
@@ -324,7 +315,7 @@ export default function Ambientes() {
       perifericoTipo: selectedPerif?.docId || '',
       acao: schedAcao,
       data: schedData,
-      horario: schedHorario,
+      horario: composedHorario,
       status: 'pendente',
       criadoEm: new Date().toISOString(),
     });
@@ -337,7 +328,7 @@ export default function Ambientes() {
   const resetScheduleForm = () => {
     setSchedAmbiente(''); setSchedTitulo(''); setSchedDescricao('');
     setSchedPerifericoId(''); setSchedAcao('ligar');
-    setSchedData(''); setSchedHorario('');
+    setSchedData(''); setSchedHora(''); setSchedMinuto('');
     setPerifericosDoAmbiente([]);
   };
 
@@ -936,31 +927,84 @@ export default function Ambientes() {
               </div>
             </div>
 
-            {/* Horário */}
+            {/* Horário - Alarm Clock Style */}
             <div className="modal-form-group">
               <label>Horário <span className="required">*</span></label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6, maxHeight: 160, overflowY: 'auto' }}>
-                {TIME_SLOTS.map(slot => (
-                  <button
-                    key={slot}
-                    type="button"
-                    onClick={() => setSchedHorario(slot)}
-                    style={{
-                      padding: '6px 4px', borderRadius: 8, border: '1px solid',
-                      borderColor: schedHorario === slot ? '#2563EB' : '#E2E8F0',
-                      backgroundColor: schedHorario === slot ? '#EFF6FF' : '#fff',
-                      color: schedHorario === slot ? '#2563EB' : '#475569',
-                      fontSize: 13, fontWeight: schedHorario === slot ? 600 : 400,
-                      cursor: 'pointer', transition: 'all 0.15s ease', textAlign: 'center',
-                    }}
-                  >
-                    {slot}
-                  </button>
-                ))}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 8,
+                position: 'relative',
+                padding: '0 16px',
+                paddingBottom: 8,
+              }}>
+                {/* Hours Column */}
+                <div style={{
+                  height: 150,
+                  overflowY: 'auto',
+                  scrollBehavior: 'smooth',
+                  width: 80,
+                  textAlign: 'center',
+                  position: 'relative',
+                }}>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSchedHora(String(i).padStart(2, '0'))}
+                      style={{
+                        width: '100%',
+                        padding: '8px 4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: schedHora === String(i).padStart(2, '0') ? 22 : 16,
+                        fontWeight: schedHora === String(i).padStart(2, '0') ? 700 : 400,
+                        color: schedHora === String(i).padStart(2, '0') ? '#2563EB' : '#94A3B8',
+                        backgroundColor: schedHora === String(i).padStart(2, '0') ? '#EFF6FF' : 'transparent',
+                        borderRadius: 8,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {String(i).padStart(2, '0')}
+                    </button>
+                  ))}
+                </div>
+                <span style={{ fontSize: 24, fontWeight: 700, color: '#1E293B' }}>:</span>
+                {/* Minutes Column */}
+                <div style={{
+                  height: 150,
+                  overflowY: 'auto',
+                  scrollBehavior: 'smooth',
+                  width: 80,
+                  textAlign: 'center',
+                }}>
+                  {Array.from({ length: 60 }, (_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setSchedMinuto(String(i).padStart(2, '0'))}
+                      style={{
+                        width: '100%',
+                        padding: '8px 4px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: schedMinuto === String(i).padStart(2, '0') ? 22 : 16,
+                        fontWeight: schedMinuto === String(i).padStart(2, '0') ? 700 : 400,
+                        color: schedMinuto === String(i).padStart(2, '0') ? '#2563EB' : '#94A3B8',
+                        backgroundColor: schedMinuto === String(i).padStart(2, '0') ? '#EFF6FF' : 'transparent',
+                        borderRadius: 8,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {String(i).padStart(2, '0')}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 
-            <div className="modal-actions">
+            <div className="modal-actions" style={{ marginTop: 24, paddingTop: 16 }}>
               <button className="btn-secondary" onClick={() => { setShowScheduleModal(false); resetScheduleForm(); }}>Cancelar</button>
               <button className="btn-primary" onClick={handleCreateSchedule}>Criar Agendamento</button>
             </div>
