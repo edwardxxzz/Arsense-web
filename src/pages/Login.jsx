@@ -11,7 +11,7 @@ import {
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { FaEye, FaEyeSlash } from 'react-icons/fa';
+import { Eye, EyeOff } from 'lucide-react';
 import logoImg from '../assets/logo.png';
 import googleImg from '../assets/google.png';
 
@@ -332,7 +332,7 @@ export default function Login() {
                       required
                     />
                     <span className="password-icon" onClick={() => setShowLoginPassword(!showLoginPassword)}>
-                      {showLoginPassword ? <FaEyeSlash /> : <FaEye />}
+                      {showLoginPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                     </span>
                   </div>
                 </div>
@@ -460,7 +460,7 @@ export default function Login() {
                         required
                       />
                       <span className="password-icon" onClick={() => setShowRegPassword(!showRegPassword)}>
-                        {showRegPassword ? <FaEyeSlash /> : <FaEye />}
+                        {showRegPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </span>
                     </div>
                   </div>
@@ -478,7 +478,7 @@ export default function Login() {
                         required
                       />
                       <span className="password-icon" onClick={() => setShowRegConfirmPassword(!showRegConfirmPassword)}>
-                        {showRegConfirmPassword ? <FaEyeSlash /> : <FaEye />}
+                        {showRegConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </span>
                     </div>
                   </div>
