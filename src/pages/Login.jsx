@@ -192,6 +192,12 @@ export default function Login() {
           timestamp: new Date().toISOString(), status: 'inicializado', observacao: 'Registro inicial',
         });
 
+        // Alertas
+        await setDoc(doc(db, 'empresas', nomeEmpresa, 'alertas', 'inicial'), {
+          criadoEm: new Date().toISOString(),
+          nome: 'inicial',
+        });
+
         await addDoc(collection(db, 'empresas', nomeEmpresa, 'historico_geral'), {
           co2_medio: 0,
           hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),

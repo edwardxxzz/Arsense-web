@@ -256,6 +256,12 @@ export function AuthProvider({ children }) {
       timestamp: new Date().toISOString(), status: 'inicializado', observacao: 'Registro inicial',
     });
 
+    // Alertas
+    await setDoc(doc(db, 'empresas', nomeEmpresa, 'alertas', 'inicial'), {
+      criadoEm: new Date().toISOString(),
+      nome: 'inicial',
+    });
+
     // Histórico geral
     await addDoc(collection(db, 'empresas', nomeEmpresa, 'historico_geral'), {
       co2_medio: 0,

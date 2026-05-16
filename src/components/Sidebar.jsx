@@ -8,7 +8,6 @@ import {
   BarChart3,
   LogOut
 } from 'lucide-react';
-import { MdOutlineSettingsRemote } from 'react-icons/md';
 
 import { useAuth } from '../context/AuthContext';
 import logoImg from '../assets/logo.png';
@@ -47,7 +46,7 @@ export default function Sidebar() {
           to="/perifericos"
           className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
         >
-          <MdOutlineSettingsRemote size={20}/>
+          <Zap size={20} />
           Periféricos
         </NavLink>
         <NavLink
