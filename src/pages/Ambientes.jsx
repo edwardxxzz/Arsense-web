@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, addDoc, deleteDoc, updateDoc, getDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -117,11 +117,28 @@ export default function Ambientes() {
             temperatura: data.sensores?.temperatura || 0,
             umidade: data.sensores?.umidade || 0,
             aqi: data.sensores?.AQI || 0,
+            indice: 0,
           });
         }
       });
       setAmbientes(envs);
       setLoading(false);
+
+      // Fetch latest indice_conforto for each ambiente
+      const indicePromises = envs.map(async (env) => {
+        try {
+          const histQ = query(collection(db, 'empresas', empresaId, 'ambientes', env.id, 'historico'), orderBy('timestamp', 'desc'), limit(1));
+          const histSnap = await getDocs(histQ);
+          if (!histSnap.empty) {
+            const latest = histSnap.docs[0].data();
+            env.indice = latest.indice_conforto ?? latest.indice_geral ?? 0;
+          }
+        } catch (err) {
+          console.error('Erro ao buscar índice do ambiente:', err);
+        }
+      });
+      await Promise.all(indicePromises);
+      setAmbientes([...envs]);
     });
     return () => unsub();
   }, [empresaId]);
@@ -235,7 +252,7 @@ export default function Ambientes() {
 
     await setDoc(doc(db, 'empresas', empresaId, 'ambientes', safeId), {
       tipo: envTipo, area: envArea, capacidade: envCapacidade, andar: envAndar,
-      dados: { centralid: 'central1', criadoEm: new Date().toISOString(), nome: envNome, receptor_id: 'receptor1' },
+      dados: { central_id: 'central1', criadoEm: new Date().toISOString(), nome: envNome, receptor_id: 'receptor1' },
       config: { tipo: envTipo, area: envArea, capacidade: envCapacidade, andar: envAndar },
       sensores: { temperatura: 0, umidade: 0, luminosidade: 0, AQI: 0 },
     });
@@ -508,7 +525,7 @@ export default function Ambientes() {
                     </div>
                   )}
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 16 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginTop: 16 }}>
                     <div style={{ textAlign: 'center', padding: 8, backgroundColor: 'white', borderRadius: 8 }}>
                       <div style={{ fontSize: 16, fontWeight: 700, color: '#EF4444' }}>{env.temperatura}°</div>
                       <div style={{ fontSize: 11, color: '#64748B' }}>Temp</div>
@@ -520,6 +537,10 @@ export default function Ambientes() {
                     <div style={{ textAlign: 'center', padding: 8, backgroundColor: 'white', borderRadius: 8 }}>
                       <div style={{ fontSize: 16, fontWeight: 700, color: '#14B8A6' }}>{env.aqi}</div>
                       <div style={{ fontSize: 11, color: '#64748B' }}>AQI</div>
+                    </div>
+                    <div style={{ textAlign: 'center', padding: 8, backgroundColor: 'white', borderRadius: 8 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: env.indice >= 80 ? '#10B981' : env.indice >= 50 ? '#F59E0B' : '#EF4444' }}>{env.indice}</div>
+                      <div style={{ fontSize: 11, color: '#64748B' }}>Índice</div>
                     </div>
                   </div>
                 </div>

@@ -100,7 +100,7 @@ export default function Dashboard() {
       capacidade: newEnvCapacidade,
       andar: newEnvAndar,
       dados: {
-        centralid: 'central1',
+        central_id: 'central1',
         criadoEm: new Date().toISOString(),
         nome: newEnvNome,
         receptor_id: 'receptor1',

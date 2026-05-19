@@ -175,7 +175,7 @@ export default function Login() {
 
         await setDoc(doc(db, 'empresas', nomeEmpresa, 'ambientes', 'ambiente_1'), {
           config: { andar: '', area: '', nome: '', tipo: '' },
-          dados: { central_id: 'central 1', criadoEM: new Date().toISOString(), nome: 'ambiente 1', receptor_id: 'receptor1' },
+          dados: { central_id: 'central 1', criadoEm: new Date().toISOString(), nome: 'ambiente 1', receptor_id: 'receptor1' },
           sensores: { iluminação: 0, presenca: false, temperatura: 0, umidade: 0 },
         }, { merge: true });
 
