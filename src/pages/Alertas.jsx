@@ -1,8 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Bell, BellOff, Info, CheckCircle, AlertTriangle, Eye, Check } from 'lucide-react';
-import { collection, onSnapshot, doc, updateDoc, query, orderBy } from 'firebase/firestore';
+import { Bell, BellOff, Info, CheckCircle, AlertTriangle, Eye, Check, AlertOctagon } from 'lucide-react';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+
+const NIVEL_CONFIG = {
+  ok:      { label: 'OK',      color: '#22C55E', bg: '#D1FAE5', icon: CheckCircle },
+  info:    { label: 'Info',    color: '#2563EB', bg: '#DBEAFE', icon: Info },
+  aviso:   { label: 'Aviso',   color: '#F59E0B', bg: '#FEF3C7', icon: AlertTriangle },
+  critico: { label: 'Crítico', color: '#EF4444', bg: '#FEE2E2', icon: AlertOctagon },
+};
+
+function getNivelConfig(nivel) {
+  return NIVEL_CONFIG[nivel] || NIVEL_CONFIG.info;
+}
 
 export default function Alertas() {
   const { empresaId } = useAuth();
@@ -13,41 +24,88 @@ export default function Alertas() {
   useEffect(() => {
     if (!empresaId) return;
 
-    const alertasRef = collection(db, 'empresas', empresaId, 'alertas');
-    const q = query(alertasRef, orderBy('criadoEm', 'desc'));
+    const rpiRef = doc(db, 'empresas', empresaId, 'alertas', 'rpi');
+    const ambRef = doc(db, 'empresas', empresaId, 'alertas', 'amb');
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((a) => a.nome !== 'inicial');
-      setAlertas(data);
+    let rpiData = null;
+    let ambData = null;
+
+    const buildAlertas = () => {
+      const list = [];
+
+      [rpiData, ambData].forEach((docData) => {
+        if (!docData) return;
+        const origem = docData.origem || '';
+        const itens = docData.itens || {};
+
+        Object.entries(itens).forEach(([alertaId, item]) => {
+          list.push({
+            id: `${origem}_${alertaId}`,
+            alertaKey: alertaId,
+            docOrigem: origem,
+            tipo: item.tipo || '',
+            nivel: item.nivel || 'info',
+            titulo: item.titulo || 'Sem título',
+            mensagem: item.mensagem || '',
+            detalhe: item.detalhe || '',
+            ativo: item.ativo !== false,
+            lido: item.lido || false,
+            origem: item.origem || origem,
+            atualizadoEm: item.atualizadoEm || '',
+          });
+        });
+      });
+
+      list.sort((a, b) => {
+        const nivelOrder = { critico: 0, aviso: 1, info: 2, ok: 3 };
+        const na = nivelOrder[a.nivel] ?? 2;
+        const nb = nivelOrder[b.nivel] ?? 2;
+        if (na !== nb) return na - nb;
+        if (a.atualizadoEm && b.atualizadoEm) return b.atualizadoEm.localeCompare(a.atualizadoEm);
+        return 0;
+      });
+
+      setAlertas(list);
+    };
+
+    const unsubRpi = onSnapshot(rpiRef, (snap) => {
+      rpiData = snap.exists() ? snap.data() : null;
+      buildAlertas();
     });
 
-    return () => unsubscribe();
+    const unsubAmb = onSnapshot(ambRef, (snap) => {
+      ambData = snap.exists() ? snap.data() : null;
+      buildAlertas();
+    });
+
+    return () => { unsubRpi(); unsubAmb(); };
   }, [empresaId]);
 
   const filteredAlertas = alertas.filter((alerta) => {
-    if (activeFilter === 'nao_lidos') return alerta.status !== 'resolvido';
-    if (activeFilter === 'resolvidos') return alerta.status === 'resolvido';
+    if (activeFilter === 'nao_lidos') return alerta.ativo && !alerta.lido;
+    if (activeFilter === 'resolvidos') return !alerta.ativo;
     return true;
   });
 
-  const markAsRead = async (alertaId) => {
+  const markAsRead = async (alerta) => {
     if (!empresaId) return;
     try {
-      await updateDoc(doc(db, 'empresas', empresaId, 'alertas', alertaId), {
-        lido: true,
+      await updateDoc(doc(db, 'empresas', empresaId, 'alertas', alerta.docOrigem), {
+        [`itens.${alerta.alertaKey}.lido`]: true,
+        [`itens.${alerta.alertaKey}.atualizadoEm`]: new Date().toISOString(),
       });
     } catch (err) {
       console.error('Erro ao marcar como lido:', err);
     }
   };
 
-  const markAsResolved = async (alertaId) => {
+  const markAsResolved = async (alerta) => {
     if (!empresaId) return;
     try {
-      await updateDoc(doc(db, 'empresas', empresaId, 'alertas', alertaId), {
-        status: 'resolvido',
+      await updateDoc(doc(db, 'empresas', empresaId, 'alertas', alerta.docOrigem), {
+        [`itens.${alerta.alertaKey}.ativo`]: false,
+        [`itens.${alerta.alertaKey}.nivel`]: 'ok',
+        [`itens.${alerta.alertaKey}.atualizadoEm`]: new Date().toISOString(),
       });
     } catch (err) {
       console.error('Erro ao marcar como resolvido:', err);
@@ -100,8 +158,10 @@ export default function Alertas() {
         </div>
       ) : (
         filteredAlertas.map((alerta) => {
-          const isResolved = alerta.status === 'resolvido';
+          const cfg = getNivelConfig(alerta.nivel);
+          const isResolved = !alerta.ativo;
           const isExpanded = expandedId === alerta.id;
+          const NivelIcon = cfg.icon;
 
           return (
             <div
@@ -119,11 +179,21 @@ export default function Alertas() {
               }}
             >
               {/* Left icon */}
-              <div style={{ flexShrink: 0, marginTop: 2 }}>
+              <div style={{
+                flexShrink: 0,
+                marginTop: 2,
+                width: 36,
+                height: 36,
+                borderRadius: 10,
+                backgroundColor: isResolved ? '#D1FAE5' : cfg.bg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
                 {isResolved ? (
-                  <CheckCircle size={22} color="#22C55E" />
+                  <CheckCircle size={20} color="#22C55E" />
                 ) : (
-                  <AlertTriangle size={22} color="#F59E0B" />
+                  <NivelIcon size={20} color={cfg.color} />
                 )}
               </div>
 
@@ -131,14 +201,26 @@ export default function Alertas() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 12, color: '#94A3B8', margin: 0, marginBottom: 2 }}>
-                      {alerta.tipo || 'Alerta'}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <p style={{ fontSize: 12, color: '#94A3B8', margin: 0 }}>
+                        {alerta.tipo || alerta.docOrigem?.toUpperCase()}
+                      </p>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        padding: '2px 6px',
+                        borderRadius: 4,
+                        backgroundColor: '#F1F5F9',
+                        color: '#64748B',
+                      }}>
+                        {alerta.docOrigem?.toUpperCase()}
+                      </span>
+                    </div>
                     <p style={{ fontSize: 15, fontWeight: 600, color: '#1E293B', margin: 0, marginBottom: 4 }}>
-                      {alerta.titulo || 'Sem título'}
+                      {alerta.titulo}
                     </p>
                     <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-                      {alerta.descricao || `${alerta.ambiente || 'Ambiente'} está com uma situação`}
+                      {alerta.mensagem}
                     </p>
                   </div>
 
@@ -153,10 +235,10 @@ export default function Alertas() {
                       whiteSpace: 'nowrap',
                       ...(isResolved
                         ? { backgroundColor: '#D1FAE5', color: '#065F46' }
-                        : { backgroundColor: '#FEF3C7', color: '#92400E' }),
+                        : { backgroundColor: cfg.bg, color: cfg.color }),
                     }}
                   >
-                    {isResolved ? 'Resolvido' : 'Não Lido'}
+                    {isResolved ? 'Resolvido' : cfg.label}
                   </span>
                 </div>
 
@@ -171,13 +253,20 @@ export default function Alertas() {
                 {/* Expanded content */}
                 {isExpanded && (
                   <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #F1F5F9' }}>
-                    <p style={{ fontSize: 13, color: '#475569', margin: 0, marginBottom: 12, lineHeight: 1.5 }}>
-                      {alerta.descricao || `${alerta.ambiente || 'Ambiente'} está com uma situação`}
-                    </p>
+                    {alerta.detalhe && (
+                      <p style={{ fontSize: 13, color: '#475569', margin: 0, marginBottom: 8, lineHeight: 1.5 }}>
+                        {alerta.detalhe}
+                      </p>
+                    )}
+                    {alerta.atualizadoEm && (
+                      <p style={{ fontSize: 12, color: '#94A3B8', margin: 0, marginBottom: 12 }}>
+                        Atualizado em: {new Date(alerta.atualizadoEm).toLocaleString('pt-BR')}
+                      </p>
+                    )}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {!alerta.lido && (
+                      {alerta.ativo && !alerta.lido && (
                         <button
-                          onClick={() => markAsRead(alerta.id)}
+                          onClick={() => markAsRead(alerta)}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -196,9 +285,9 @@ export default function Alertas() {
                           Marcar como lido
                         </button>
                       )}
-                      {!isResolved && (
+                      {alerta.ativo && (
                         <button
-                          onClick={() => markAsResolved(alerta.id)}
+                          onClick={() => markAsResolved(alerta)}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -214,7 +303,7 @@ export default function Alertas() {
                           }}
                         >
                           <Check size={14} />
-                          Marcar como resolvido
+                          Resolver
                         </button>
                       )}
                     </div>

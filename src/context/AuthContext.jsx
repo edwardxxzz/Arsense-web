@@ -256,10 +256,23 @@ export function AuthProvider({ children }) {
       timestamp: new Date().toISOString(), status: 'inicializado', observacao: 'Registro inicial',
     });
 
-    // Alertas
-    await setDoc(doc(db, 'empresas', nomeEmpresa, 'alertas', 'inicial'), {
-      criadoEm: new Date().toISOString(),
-      nome: 'inicial',
+    // Alertas — documentos rpi e amb
+    const alertasBase = {
+      schema: 'alertas/v1',
+      origem: '',
+      central_id: '',
+      atualizadoEm: new Date().toISOString(),
+      status: 'ok',
+      totalAtivos: 0,
+      itens: {},
+    };
+    await setDoc(doc(db, 'empresas', nomeEmpresa, 'alertas', 'rpi'), {
+      ...alertasBase,
+      origem: 'rpi',
+    });
+    await setDoc(doc(db, 'empresas', nomeEmpresa, 'alertas', 'amb'), {
+      ...alertasBase,
+      origem: 'amb',
     });
 
     // Histórico geral
