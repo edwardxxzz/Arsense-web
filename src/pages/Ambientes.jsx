@@ -102,7 +102,7 @@ export default function Ambientes() {
   // ====================================================================
   useEffect(() => {
     if (!empresaId) return;
-    const unsub = onSnapshot(collection(db, 'empresas', empresaId, 'ambientes'), (snapshot) => {
+    const unsub = onSnapshot(collection(db, 'empresas', empresaId, 'ambientes'), async (snapshot) => {
       const envs = [];
       snapshot.forEach(d => {
         if (d.id.toLowerCase() !== 'ambiente_1') {
