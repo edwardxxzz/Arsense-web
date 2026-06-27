@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =============================================
+    // Empresas
+    // =============================================
+    match /empresas/{empresaId} {
+
+      // Verifica se o usuário autenticado pertence a esta empresa
+      function pertenceEmpresa() {
+        return request.auth != null &&
+               exists(/databases/$(database)/documents/empresas/$(empresaId)/usuarios/$(request.auth.uid));
+      }
+
+      // Qualquer usuário autenticado pode ler dados básicos da empresa
+      // (necessário para o fluxo de cadastro verificar se empresa já existe)
+      allow read: if request.auth != null;
+
+      // Apenas membros podem atualizar dados da empresa
+      allow create, update: if request.auth != null;
+
+      // --- Documento da empresa ---
+      match /{document=**} {
+        allow read: if request.auth != null;
+      }
+
+      // --- Coleção: usuarios ---
+      match /usuarios/{userId} {
+        // Usuário pode ler a si mesmo
+        allow read: if request.auth != null && request.auth.uid == userId;
+        // Membros da empresa podem ler qualquer usuário
+        allow read: if pertenceEmpresa();
+        // Usuário autenticado pode criar o próprio registro (cadastro)
+        allow create: if request.auth != null && request.auth.uid == userId;
+        // Apenas membros podem atualizar/deletar
+        allow update: if pertenceEmpresa();
+        allow delete: if pertenceEmpresa();
+      }
+
+      // --- Coleção: centrais ---
+      match /centrais/{centralId} {
+        allow read, write: if pertenceEmpresa();
+        allow create: if request.auth != null; // Cadastro cria central
+        // Dispositivo IoT atualiza status
+        allow update: if true;
+      }
+
+      // --- Subcoleções de ambientes ---
+      match /ambientes/{ambienteId} {
+
+        // Documento do ambiente — membros leem e escrevem
+        allow read, write: if pertenceEmpresa();
+        // Cadastro pode precisar criar ambiente inicial
+        allow create: if request.auth != null;
+
+        // Historico — leitura para membros, escrita para dispositivos (sem auth) e membros
+        match /historico/{histId} {
+          allow read: if pertenceEmpresa();
+          allow create: if true; // Dispositivo IoT envia dados (sem auth)
+          allow update, delete: if pertenceEmpresa();
+        }
+
+        // Perifericos — leitura/escrita para membros
+        match /perifericos/{perifId} {
+          allow read, write: if pertenceEmpresa();
+          // Dispositivo IoT atualiza estado_real
+          allow update: if true;
+        }
+
+        // Agendamentos — leitura/escrita para membros
+        match /agendamentos/{agendId} {
+          allow read, write: if pertenceEmpresa();
+        }
+
+        // Alertas — leitura para membros, escrita para dispositivos
+        match /alertas/{alertaId} {
+          allow read: if pertenceEmpresa();
+          allow create: if true; // Dispositivo IoT cria alertas
+          allow update, delete: if pertenceEmpresa();
+        }
+
+        // Sensores — leitura para membros, escrita para dispositivos
+        match /sensores/{sensorId} {
+          allow read: if pertenceEmpresa();
+          allow write: if true; // Dispositivo IoT envia dados
+        }
+      }
+
+      // --- Historico geral da empresa ---
+      match /historico_geral/{histId} {
+        allow read: if pertenceEmpresa();
+        allow create: if true; // Dispositivo IoT envia dados
+        allow update, delete: if pertenceEmpresa();
+      }
+    }
+  }
+}

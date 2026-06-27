@@ -3,12 +3,12 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyD1QTM-zGjE-zyZd8jsVz8K1AEwf8MYNLE",
-  authDomain: "arsensee-f4183.firebaseapp.com",
-  projectId: "arsensee-f4183",
-  storageBucket: "arsensee-f4183.firebasestorage.app",
-  messagingSenderId: "95414008670",
-  appId: "1:95414008670:web:14fc2a9a9841d12b55edcf"
+  apiKey: "AIzaSyAguzA0YUsAGUnx86Kx-V1mgmtaVrjDUqE",
+  authDomain: "arsense-9f3a4.firebaseapp.com",
+  projectId: "arsense-9f3a4",
+  storageBucket: "arsense-9f3a4.firebasestorage.app",
+  messagingSenderId: "211530848431",
+  appId: "1:211530848431:web:48ac70f2b6abb86a199c5a"
 };
 
 const app = initializeApp(firebaseConfig);
